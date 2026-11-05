@@ -1,0 +1,22 @@
+input_dir: examples/decompiled
+output_dir: runs
+max_file_bytes: 2000000
+bundle_token_budget: 12000
+context_char_budget: 12000
+# Byte count is a conservative estimate, NOT a model tokenizer.
+tokenizer: utf8_bytes
+# Alternative: tiktoken:cl100k_base (install the tokens extra).
+# Choose a tokenizer appropriate to the selected models; reserve prompt/output space.
+include_globs: ["*.java", "*.kt", "*.xml", "*.json", "*.properties", "*.txt", "*.smali", "*.js", "*.html"]
+exclude_globs: []
+models:
+  teacher:
+    provider: openai_compatible
+    model: REPLACE_WITH_TEACHER_MODEL
+    base_url: https://api.openai.com/v1
+    api_key_env: TEACHER_API_KEY
+  student:
+    provider: openai_compatible
+    model: REPLACE_WITH_OPEN_MODEL
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: STUDENT_API_KEY

@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="demo">
+  <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="35" />
+  <application android:label="Synthetic fixture">
+    <activity android:name=".MainActivity" android:exported="false" />
+  </application>
+</manifest>
