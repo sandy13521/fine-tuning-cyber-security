@@ -15,8 +15,11 @@ models:
     model: REPLACE_WITH_TEACHER_MODEL
     base_url: https://api.openai.com/v1
     api_key_env: TEACHER_API_KEY
+    max_output_tokens: 4096
+    # Set token_parameter / response_format to those supported by your model.
   student:
     provider: openai_compatible
     model: REPLACE_WITH_OPEN_MODEL
     base_url: https://api.groq.com/openai/v1
     api_key_env: STUDENT_API_KEY
+    max_output_tokens: 4096

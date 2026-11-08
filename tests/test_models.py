@@ -76,3 +76,13 @@ class ModelTests(unittest.TestCase):
         client=OpenAICompatibleClient(self.config(retries=1),httpx.MockTransport(handler))
         with self.assertRaisesRegex(ModelError,'HTTP 503'):client.generate([])
         self.assertEqual(len(calls),2)
+
+    def test_strict_schema_requires_nullable_defaults(self):
+        from cyber_scan.models.openai_compatible import strict_json_schema
+        from cyber_scan.scan.runner import ScanResponse
+        original=ScanResponse.model_json_schema()
+        result=strict_json_schema(original)
+        self.assertEqual(set(result['required']),{'findings','notes'})
+        self.assertNotIn('default',result['properties']['notes'])
+        self.assertIn('cwe',result['$defs']['Finding']['required'])
+        self.assertFalse(result['additionalProperties'])

@@ -7,6 +7,19 @@ from ..schemas import ModelResponse
 class ModelError(RuntimeError):
     pass
 
+def strict_json_schema(schema):
+    """Strict structured output requires all declared properties, including nullable ones."""
+    if isinstance(schema, list):
+        return [strict_json_schema(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    result = {key: strict_json_schema(value) for key, value in schema.items() if key != 'default'}
+    if result.get('type') == 'object' and 'properties' in result:
+        result['required'] = list(result['properties'])
+        result['additionalProperties'] = False
+    return result
+
+
 class OpenAICompatibleClient:
     def __init__(self, config, transport=None):
         self.config = config
@@ -27,7 +40,7 @@ class OpenAICompatibleClient:
         if response_schema:
             messages.append({"role": "system", "content": "Return only valid JSON matching this schema: " + json.dumps(response_schema)})
             if config.response_format == "json_schema":
-                payload["response_format"] = {"type": "json_schema", "json_schema": {"name": "result", "schema": response_schema, "strict": True}}
+                payload["response_format"] = {"type": "json_schema", "json_schema": {"name": "result", "schema": strict_json_schema(response_schema), "strict": True}}
             elif config.response_format == "json_object":
                 payload["response_format"] = {"type": "json_object"}
         start = time.monotonic()

@@ -1,6 +1,6 @@
 # Android vulnerability learning harness
 
-Milestones 1 and 2: project setup, model interface, APK decompilation wrapper, and deterministic ingestion. This is **not yet a vulnerability scanner**. No detection results or recall lift are claimed.
+Project setup, model interface, deterministic ingestion, frozen scan plans, and a resumable static scanner with source-evidence validation. No live detection results or recall lift are claimed; provider credentials have not been configured.
 
 ## Quick start (offline fixture)
 
@@ -61,10 +61,24 @@ cyber-scan model-smoke --config config.yaml --role student --output runs/student
 
 The smoke test sends only a request to reply OK, not app code. It saves a request/response record with model settings and usage; keys are never written. Cost in currency is not calculated because model pricing is not configured. No live provider requests were made during initial validation. Provider compatibility reference: https://console.groq.com/docs/openai.
 
+## Full static scan
+
+See [docs/scanning.md](docs/scanning.md) for preparation, provider configuration, resuming, and interpreting results.
+
+```bash
+# Use the actual ingestion path printed by the ingest command.
+cyber-scan plan-scan --config config.yaml --ingest-dir runs/INGEST_RUN_ID/ingest --output runs/full-plan
+cyber-scan scan --config config.yaml --plan runs/full-plan --output runs/teacher-full --role teacher
+```
+
+Plan creation is offline and scans every ingested text file as a primary, including dependencies. It retains existing whole-file bundles and splits over-budget files into overlapping windows, including long-line fragments when necessary. It does not hide the original ingestion exclusions or partial-decompilation warning. The frozen source plan is reused across teacher and student runs.
+
+The scanner validates JSON and evidence spans, keeps raw responses and rejected findings, and collapses exact duplicates only. Source-consistent findings still require security review. Empty model output, failed requests and truncated responses are not counted as clean scans. The command exits with code 1 for incomplete scans, and 2 for configuration/preflight failures.
+
 ## Next milestones
 
-1. Scan frozen bundles and validate finding evidence against source spans.
-2. Run teacher and baseline student; synthesize general lessons once; rescan the same student.
+1. Configure a teacher model/API key and execute the full plan; review real findings and noise.
+2. Run the baseline student on the same plan; synthesize general lessons once; rescan the student.
 3. Evaluate with an isolated ground-truth catalog, explicit matching and reviewed ambiguity.
 4. Report recall gains/losses, unsupported findings, cost, and limitations; write the dynamic-analysis proposal.
 
@@ -72,4 +86,4 @@ Ground-truth labels must never enter scan/lesson prompts. Treat decompiled code/
 
 ## Validation
 
-22 tests use unittest and mocked HTTP/subprocesses. They cover reproducibility, related-file inclusion, manifest parsing, malformed XML, binary/symlink exclusions, token/size limits, configuration errors, request construction, retry/error behavior, and APK provenance. They do not establish vulnerability-detection quality.
+36 tests use unittest and mocked HTTP/subprocesses. They cover reproducibility, related-file inclusion, manifest parsing, malformed XML, binary/symlink exclusions, token/size limits, configuration errors, request construction, retry/error behavior, and APK provenance. They do not establish vulnerability-detection quality.

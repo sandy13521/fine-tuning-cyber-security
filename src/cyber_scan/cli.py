@@ -10,10 +10,12 @@ from .ingest.apk import download_apk, decompile
 from .ingest.pipeline import ingest, write_json
 from .models import create_client
 from .models.openai_compatible import ModelError
+from .scan.plan import build_plan
+from .scan.runner import run_scan
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="APK ingestion and model connectivity; scanning is a subsequent milestone")
+    parser = argparse.ArgumentParser(description="Reproducible APK ingestion and evidence-linked static scans")
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("validate-config", "ingest", "model-smoke"):
         command = commands.add_parser(name)
@@ -21,6 +23,19 @@ def main(argv=None):
         if name == "model-smoke":
             command.add_argument("--role", choices=["teacher", "student"], required=True)
             command.add_argument("--output", type=Path, required=True)
+    plan = commands.add_parser("plan-scan")
+    plan.add_argument("--config", type=Path, required=True)
+    plan.add_argument("--ingest-dir", type=Path, required=True)
+    plan.add_argument("--output", type=Path, required=True)
+    scan = commands.add_parser("scan")
+    scan.add_argument("--config", type=Path, required=True)
+    scan.add_argument("--plan", type=Path, required=True)
+    scan.add_argument("--output", type=Path, required=True)
+    scan.add_argument("--role", choices=["teacher", "student"], default="teacher")
+    scan.add_argument("--resume", action="store_true")
+    scan.add_argument("--retry-failed", action="store_true")
+    scan.add_argument("--max-requests", type=int)
+    scan.add_argument("--delay-seconds", type=float, default=0)
     download = commands.add_parser("download")
     download.add_argument("--url", required=True)
     download.add_argument("--output", type=Path, required=True)
@@ -38,7 +53,23 @@ def main(argv=None):
             print(decompile(args.apk, args.output, args.jadx, args.timeout))
         else:
             config = load_config(args.config)
-            if args.command == "validate-config":
+            if args.command == "plan-scan":
+                report = build_plan(config, args.ingest_dir, args.output)
+                print(json.dumps({key: value for key, value in report.items()
+                                  if key not in {"skipped", "decompilation"}}, indent=2))
+            elif args.command == "scan":
+                if args.max_requests is not None and args.max_requests <= 0:
+                    raise ValueError("--max-requests must be positive")
+                if args.delay_seconds < 0 or args.delay_seconds > 60:
+                    raise ValueError("--delay-seconds must be between 0 and 60")
+                report = run_scan(config, args.plan, args.output, args.role, args.resume,
+                                  args.retry_failed, args.max_requests, args.delay_seconds,
+                                  progress=lambda item: print(json.dumps(item), flush=True))
+                print(json.dumps({key: report[key] for key in
+                                  ("status", "planned_units", "completed_units", "accepted_unique_findings", "usage")}, indent=2))
+                if report['status'] != 'completed':
+                    parser.exit(1, "Scan incomplete; inspect summary.json and resume.\n")
+            elif args.command == "validate-config":
                 print("Configuration valid. Credentials and model availability have not been checked.")
             elif args.command == "ingest":
                 destination, coverage = ingest(config)

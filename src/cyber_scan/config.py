@@ -14,7 +14,7 @@ class ModelConfig(StrictModel):
     api_key_env: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     timeout_seconds: float = Field(default=60, gt=0, le=300)
     retries: int = Field(default=2, ge=0, le=5)
-    max_output_tokens: int = Field(default=1024, gt=0)
+    max_output_tokens: int = Field(default=4096, gt=0)
     token_parameter: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
     temperature: float | None = None
     response_format: Literal["prompt", "json_object", "json_schema"] = "prompt"
