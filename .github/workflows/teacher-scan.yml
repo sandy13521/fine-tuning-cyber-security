@@ -31,6 +31,10 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -e .
+      - name: Diagnose endpoint, model access and token reservation
+        env:
+          TEACHER_API_KEY: ${{ secrets.TEACHER_API_KEY }}
+        run: python scripts/diagnose_openai.py
       - name: Verify teacher credential, quota and model access
         env:
           TEACHER_API_KEY: ${{ secrets.TEACHER_API_KEY }}
@@ -73,6 +77,7 @@ jobs:
         with:
           name: teacher-setup
           path: |
+            runs/provider-diagnostics.json
             runs/teacher-smoke.json
             data/cloud/decompile.json
             data/cloud/jadx.log
