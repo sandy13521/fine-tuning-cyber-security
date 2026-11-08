@@ -86,3 +86,18 @@ class ModelTests(unittest.TestCase):
         self.assertNotIn('default',result['properties']['notes'])
         self.assertIn('cwe',result['$defs']['Finding']['required'])
         self.assertFalse(result['additionalProperties'])
+
+    @patch.dict(os.environ, {'TEST_API_KEY':'secret'})
+    def test_insufficient_quota_does_not_retry_or_echo_body(self):
+        calls=[]
+        def handler(request):
+            calls.append(request)
+            return httpx.Response(429,json={'error':{'code':'insufficient_quota','message':'secret'}})
+        client=OpenAICompatibleClient(self.config(),httpx.MockTransport(handler))
+        with self.assertRaisesRegex(ModelError,'insufficient_quota') as error:client.generate([])
+        self.assertNotIn('secret',str(error.exception))
+        self.assertEqual(len(calls),1)
+
+    def test_error_code_allowlist(self):
+        from cyber_scan.models.openai_compatible import provider_error_code
+        self.assertIsNone(provider_error_code(httpx.Response(401,json={'error':{'code':'secret'}})))

@@ -20,6 +20,18 @@ def strict_json_schema(schema):
     return result
 
 
+def provider_error_code(response):
+    # Fixed allowlist only: never log arbitrary provider response text or secrets.
+    try:
+        error = response.json().get('error', {})
+        code = error.get('code') or error.get('type')
+    except (ValueError, AttributeError, TypeError):
+        return None
+    allowed = {'insufficient_quota', 'rate_limit_exceeded', 'invalid_api_key',
+               'model_not_found', 'permission_denied', 'billing_hard_limit_reached'}
+    return code if isinstance(code, str) and code in allowed else None
+
+
 class OpenAICompatibleClient:
     def __init__(self, config, transport=None):
         self.config = config
@@ -54,6 +66,9 @@ class OpenAICompatibleClient:
                         raise ModelError("Provider transport failure after retries") from None
                     time.sleep(min(2 ** attempt, 8))
                     continue
+                error_code = provider_error_code(response) if not response.is_success else None
+                if error_code in {'insufficient_quota', 'billing_hard_limit_reached'}:
+                    raise ModelError(f"Provider returned HTTP {response.status_code} ({error_code})")
                 if response.status_code == 429 or response.status_code >= 500:
                     if attempt < config.retries:
                         try:
@@ -64,7 +79,7 @@ class OpenAICompatibleClient:
                         continue
                 if not response.is_success:
                     # Never echo provider bodies: they can contain request data or credentials.
-                    raise ModelError(f"Provider returned HTTP {response.status_code}")
+                    raise ModelError(f"Provider returned HTTP {response.status_code}" + (f" ({error_code})" if error_code else ""))
                 try:
                     body = response.json()
                     choice = body["choices"][0]

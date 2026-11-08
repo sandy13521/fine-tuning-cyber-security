@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -e .
-      - name: Verify teacher credential and model access
+      - name: Verify teacher credential, quota and model access
         env:
           TEACHER_API_KEY: ${{ secrets.TEACHER_API_KEY }}
         run: cyber-scan model-smoke --config config.cloud.yaml --role teacher --output runs/teacher-smoke.json
