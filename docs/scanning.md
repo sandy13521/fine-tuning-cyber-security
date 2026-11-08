@@ -66,3 +66,23 @@ Plan ID: `55665bdfa8fa048477eafbb7411cec6698d05808a5023c4eda67d04846b8bf91`.
 The byte count is not a tokenizer-derived token count or currency estimate. Repeated context, prompts, schemas and outputs add cost. No supported text files were skipped due to the size threshold in this ingestion; all 667 original exclusions were unsupported extensions. JADX's 11 errors remain a partial-decompilation warning. Real models and API credentials were absent, so preflight stopped before the first request. No security findings were produced or claimed.
 
 Validation: 36 offline tests passed, including source integrity, long-line/window coverage, schema/evidence checks, truncated responses, resumability, retry history and credential preflight. Tests use fake model responses and do not measure vulnerability detection quality.
+
+## GitHub Actions cloud run
+
+The **OpenAI teacher scan** workflow uses the repository Actions secret `TEACHER_API_KEY`.
+`config.cloud.yaml` selects `gpt-5.6-sol`, strict structured output, and a 16,384-token completion budget including reasoning. No temperature override is sent. Account model access and billing are verified by a small live smoke request first. Model documentation: https://developers.openai.com/api/docs/models/gpt-5.6-sol.
+
+The workflow starts when its YAML file is pushed to main (including initial setup), or manually under **Actions → OpenAI teacher scan → Run workflow**. It downloads the pinned public InsecureShop v1.0 APK, verifies its known SHA-256, runs JADX 1.5.6, preserves any partial-decompilation warning, freezes all supported text, and partitions requests into eight disjoint jobs. Partial JADX output is allowed only when a nonzero exit is recorded and extracted source exists; a timeout or missing output fails setup.
+
+The first run starts the full teacher scan automatically. It incurs API charges for actual usage. Each shard checkpoints each completed response. The command timeout allows artifact-upload time before the job timeout. Persistent provider errors stop the affected shard, and report aggregation marks missing/failed requests incomplete. Findings remain unconfirmed pending review.
+
+Artifacts are retained for 14 days:
+
+- `teacher-plan`: complete frozen plan and eight shard plans.
+- `teacher-setup`: smoke response, JADX status/logs.
+- `teacher-results-0` through `teacher-results-7`: request/response records, checkpoints, and per-shard summaries.
+- `teacher-combined-report`: combined summary, source-consistent findings, rejections and duplicate details.
+
+To resume an interrupted run, manually run the workflow with its previous Actions **run ID** in `resume_run_id`. Keep the same model config, scanner version and prompt. The workflow restores the original frozen plan and each shard's checkpoints; completed requests are not repeated. Failed attempts are archived and retried. If a shard never produced an artifact, a full automatic restore cannot succeed; download the available records and recover deliberately. Artifacts must still exist within retention. Manually cancelled workflows may be unable to finish artifact uploads.
+
+Repository secret values are never read back into the chat. A successful smoke check in Actions establishes that the configured key works; adding a secret alone does not verify it.

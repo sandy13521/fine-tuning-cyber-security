@@ -1,0 +1,159 @@
+name: OpenAI teacher scan
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/teacher-scan.yml]
+  workflow_dispatch:
+    inputs:
+      resume_run_id:
+        description: 'Optional prior Actions run ID to resume (same frozen plan and model config)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: full-openai-teacher-scan
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e .
+      - name: Verify teacher credential and model access
+        env:
+          TEACHER_API_KEY: ${{ secrets.TEACHER_API_KEY }}
+        run: cyber-scan model-smoke --config config.cloud.yaml --role teacher --output runs/teacher-smoke.json
+      - name: Run offline tests
+        run: python -m unittest discover -s tests -v
+      - uses: actions/setup-java@v4
+        if: ${{ !inputs.resume_run_id }}
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install pinned JADX release
+        if: ${{ !inputs.resume_run_id }}
+        run: |
+          curl --fail --location --retry 3 https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip --output /tmp/jadx.zip
+          unzip -q /tmp/jadx.zip -d /tmp/jadx
+          chmod +x /tmp/jadx/bin/jadx
+      - name: Decompile and freeze all supported source
+        if: ${{ !inputs.resume_run_id }}
+        run: python scripts/cloud_teacher.py prepare --jadx /tmp/jadx/bin/jadx
+      - name: Restore frozen plan for resume
+        if: ${{ inputs.resume_run_id }}
+        uses: actions/download-artifact@v4
+        with:
+          name: teacher-plan
+          path: runs
+          run-id: ${{ inputs.resume_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: teacher-plan
+          path: |
+            runs/full-plan
+            runs/shards
+          retention-days: 14
+          if-no-files-found: error
+      - name: Preserve setup diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: teacher-setup
+          path: |
+            runs/teacher-smoke.json
+            data/cloud/decompile.json
+            data/cloud/jadx.log
+          retention-days: 14
+
+  scan:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: teacher-plan
+          path: cloud-plan
+      - name: Restore previous shard checkpoint
+        if: ${{ inputs.resume_run_id }}
+        uses: actions/download-artifact@v4
+        with:
+          name: teacher-results-${{ matrix.shard }}
+          path: cloud-results/${{ matrix.shard }}
+          run-id: ${{ inputs.resume_run_id }}
+          github-token: ${{ github.token }}
+      - name: Run teacher scan on every assigned unit
+        env:
+          TEACHER_API_KEY: ${{ secrets.TEACHER_API_KEY }}
+        run: |
+          # A prior runner timeout can leave this marker; restored artifacts have no live process.
+          rm -rf cloud-results/${{ matrix.shard }}/.running
+          timeout --signal=INT --kill-after=30s 18000 python scripts/cloud_teacher.py scan --shard ${{ matrix.shard }}
+      - name: Preserve responses and checkpoints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: teacher-results-${{ matrix.shard }}
+          path: cloud-results/${{ matrix.shard }}
+          retention-days: 14
+          if-no-files-found: warn
+
+  report:
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    needs: [prepare, scan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: teacher-plan
+          path: cloud-plan
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: teacher-results-*
+          path: collected
+      - name: Combine findings and report actual completion
+        id: aggregate
+        run: python scripts/cloud_teacher.py aggregate
+      - name: Publish run summary
+        if: always()
+        run: |
+          if test -f combined/STATUS.md; then cat combined/STATUS.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: teacher-combined-report
+          path: combined
+          retention-days: 14

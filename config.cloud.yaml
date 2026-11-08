@@ -1,0 +1,16 @@
+input_dir: data/cloud/decompiled
+output_dir: runs
+bundle_token_budget: 12000
+context_char_budget: 12000
+tokenizer: utf8_bytes
+models:
+  teacher:
+    provider: openai_compatible
+    model: gpt-5.6-sol
+    base_url: https://api.openai.com/v1
+    api_key_env: TEACHER_API_KEY
+    token_parameter: max_completion_tokens
+    max_output_tokens: 16384
+    response_format: json_schema
+    timeout_seconds: 180
+    retries: 2

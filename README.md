@@ -61,6 +61,10 @@ cyber-scan model-smoke --config config.yaml --role student --output runs/student
 
 The smoke test sends only a request to reply OK, not app code. It saves a request/response record with model settings and usage; keys are never written. Cost in currency is not calculated because model pricing is not configured. No live provider requests were made during initial validation. Provider compatibility reference: https://console.groq.com/docs/openai.
 
+## Cloud teacher run
+
+Add `TEACHER_API_KEY` as a repository Actions secret. The [OpenAI teacher scan](../../actions/workflows/teacher-scan.yml) workflow runs GPT-5.6 Sol over all supported decompiled text in eight checkpointed jobs. The initial workflow push starts it automatically; subsequent runs can be started manually. See [cloud instructions](docs/scanning.md#github-actions-cloud-run) for artifacts and resuming. Live results depend on the Actions run; adding the workflow does not establish that the model scan succeeded.
+
 ## Full static scan
 
 See [docs/scanning.md](docs/scanning.md) for preparation, provider configuration, resuming, and interpreting results.
@@ -86,4 +90,4 @@ Ground-truth labels must never enter scan/lesson prompts. Treat decompiled code/
 
 ## Validation
 
-36 tests use unittest and mocked HTTP/subprocesses. They cover reproducibility, related-file inclusion, manifest parsing, malformed XML, binary/symlink exclusions, token/size limits, configuration errors, request construction, retry/error behavior, and APK provenance. They do not establish vulnerability-detection quality.
+39 tests use unittest and mocked HTTP/subprocesses. They cover reproducibility, related-file inclusion, manifest parsing, malformed XML, binary/symlink exclusions, token/size limits, configuration errors, request construction, retry/error behavior, and APK provenance. They do not establish vulnerability-detection quality.
