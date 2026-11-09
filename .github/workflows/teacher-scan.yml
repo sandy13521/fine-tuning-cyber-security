@@ -102,7 +102,7 @@ jobs:
           path: cloud-results/${{ matrix.shard }}
           run-id: ${{ inputs.resume_run_id }}
           github-token: ${{ github.token }}
-      - name: Run teacher scan on every assigned unit
+      - name: Run GPT-4.1 teacher scan on every assigned unit
         env:
           TEACHER_API_KEY: ${{ secrets.TEACHER_API_KEY }}
         run: |

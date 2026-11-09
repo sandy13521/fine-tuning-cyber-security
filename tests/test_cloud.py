@@ -52,6 +52,6 @@ class CloudTests(unittest.TestCase):
     def test_cloud_config(self):
         from cyber_scan.config import load_config
         config = load_config(Path(__file__).resolve().parents[1] / 'config.cloud.yaml')
-        self.assertEqual(config.models['teacher'].model, 'gpt-5.6-sol')
+        self.assertEqual(config.models['teacher'].model, 'gpt-4.1')
         self.assertEqual(config.models['teacher'].api_key_env, 'TEACHER_API_KEY')
         self.assertEqual(config.models['teacher'].token_parameter, 'max_completion_tokens')

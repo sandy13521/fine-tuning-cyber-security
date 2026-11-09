@@ -6,7 +6,7 @@ tokenizer: utf8_bytes
 models:
   teacher:
     provider: openai_compatible
-    model: gpt-5.6-sol
+    model: gpt-4.1
     base_url: https://api.openai.com/v1
     api_key_env: TEACHER_API_KEY
     token_parameter: max_completion_tokens
