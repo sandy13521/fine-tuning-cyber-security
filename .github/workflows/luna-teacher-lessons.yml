@@ -28,17 +28,17 @@ jobs:
       - run: python -m pip install -e .
       - name: Run offline tests
         run: python -m unittest discover -s tests -q
-      - name: Restore the frozen 17-bundle plan
+      - name: Restore the two completed scan bundles and frozen plan
         uses: actions/download-artifact@v4
         with:
-          name: qwen-teacher-report
+          name: luna-teacher-lessons
           path: runs
-          run-id: 42638609995
+          run-id: 42642884135
           github-token: ${{ github.token }}
-      - name: Run the budgeted scan and record provider error codes
+      - name: Resume the budgeted scan and synthesize lessons
         env:
           TEACHER_API_KEY: ${{ secrets.TEACHER_API_KEY }}
-        run: python scripts/cloud_luna_lessons.py
+        run: python scripts/cloud_luna_lessons.py --resume
       - name: Preserve findings, usage, and lessons
         if: always()
         uses: actions/upload-artifact@v4
