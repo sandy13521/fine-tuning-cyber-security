@@ -1,0 +1,105 @@
+name: Lesson-assisted student quota probe
+
+on:
+  push:
+    branches: [experiment/student-quota-probe]
+    paths: [.github/workflows/student-quota-probe.yml]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: groq-student-baseline
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: ${{ github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[tokens]'
+      - uses: actions/download-artifact@v4
+        with:
+          name: student-baseline
+          path: runs
+          run-id: 42631656348
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: luna-teacher-lessons
+          path: runs
+          run-id: 42643352316
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: student-lesson-assisted
+          path: runs
+          run-id: 42653069938
+          github-token: ${{ github.token }}
+      - name: Probe Groq with one lesson-assisted request
+        env:
+          STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
+          PYTHONPATH: scripts
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from cloud_student_lessons import BASELINE, LESSONS, MATCHED_PLAN, OUTPUT, PLAN, preflight
+          from cyber_scan.config import load_config
+          from cyber_scan.scan.plan import load_plan
+          from cyber_scan.scan.runner import atomic_json, run_scan
+
+          config = load_config(Path('config.student.yaml'))
+          model = config.models['student']
+          if (model.model, model.base_url, model.retries) != (
+              'openai/gpt-oss-20b', 'https://api.groq.com/openai/v1', 0
+          ):
+              raise ValueError('Expected the configured Groq student with retries disabled')
+          if not os.environ.get(model.api_key_env):
+              raise ValueError('Groq credential is missing')
+
+          appendix, comparison = preflight(config, PLAN, BASELINE, LESSONS, MATCHED_PLAN)
+          _, units = load_plan(MATCHED_PLAN)
+          unit = next(u for u in units if u['sequence'] == 7)
+          request = OUTPUT / 'requests' / (unit['id'] + '.json')
+          old = json.loads(request.read_text())
+          if old['status'] != 'provider_error' or not old.get('error', '').startswith('Provider returned HTTP 429'):
+              raise ValueError('Expected the saved WebViewActivity rate-limit response')
+
+          history = OUTPUT / 'history' / unit['id']
+          history.mkdir(parents=True, exist_ok=True)
+          request.rename(history / 'before-quota-probe.json')
+          events = []
+          report = run_scan(config, MATCHED_PLAN, OUTPUT, role='student', resume=True,
+                            max_requests=1, system_appendix=appendix, progress=events.append)
+          if len(events) != 1 or events[0]['unit'] != unit['id']:
+              raise ValueError('Probe did not target the checkpointed bundle')
+          event = events[0]
+          result = {**event, 'model': model.model, 'completed_units': report['completed_units'],
+                    'planned_units': report['planned_units'],
+                    'accepted_unique_findings': report['accepted_unique_findings']}
+          atomic_json(OUTPUT / 'comparison.json', comparison)
+          atomic_json(OUTPUT / 'quota-probe.json', result)
+          print(json.dumps(result), flush=True)
+          raise SystemExit(0 if event['status'] in {'completed', 'completed_with_rejections'} else 1)
+          PY
+      - name: Preserve the probe and checkpoint
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-lesson-assisted
+          path: |
+            runs/student-lesson-assisted
+            runs/matched-student-plan
+          retention-days: 90
+          if-no-files-found: error
