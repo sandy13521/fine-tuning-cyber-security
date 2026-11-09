@@ -1,0 +1,33 @@
+name: GPT-4.1 teacher access check
+on:
+  push:
+    branches: [codex/gpt41-access-check]
+    paths: [.github/workflows/teacher-access-check.yml]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e .
+      - name: Send one GPT-4.1 completion request
+        env:
+          TEACHER_API_KEY: ${{ secrets.TEACHER_API_KEY }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          path = Path('config.cloud.yaml')
+          config = yaml.safe_load(path.read_text())
+          config['models']['teacher'].update(model='gpt-4.1', retries=0,
+                                             max_output_tokens=16, timeout_seconds=45)
+          path.write_text(yaml.safe_dump(config))
+          PY
+          cyber-scan model-smoke --config config.cloud.yaml --role teacher --output runs/gpt41-smoke.json
