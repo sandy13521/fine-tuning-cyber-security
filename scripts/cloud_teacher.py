@@ -98,18 +98,23 @@ def select_files(config, inventory, manifests):
     return selected
 
 
-def freeze(config, destination):
+def freeze_source(config, destination):
     ingested, _ = ingest(config)
     inventory = json.loads((ingested / 'inventory.json').read_text())
     manifests = json.loads((ingested / 'manifest.json').read_text())
     selected = select_files(config, inventory, manifests)
     build_plan(config, ingested, destination / 'source-plan', selected_paths=selected)
-    group_plan(destination / 'source-plan', destination / 'full-plan', REQUESTS,
-               'utf8_bytes', MAX_SOURCE_BYTES)
-    partition(destination / 'full-plan', destination / 'shards')
     write_json(destination / 'teacher-inventory.json', [
         {**item, 'teacher_primary': item['path'] in selected} for item in inventory
     ])
+
+    return destination / 'source-plan'
+
+
+def freeze(config, destination):
+    source = freeze_source(config, destination)
+    group_plan(source, destination / 'full-plan', REQUESTS, 'utf8_bytes', MAX_SOURCE_BYTES)
+    partition(destination / 'full-plan', destination / 'shards')
 
 
 def check_budget(config, plan, units):
@@ -152,8 +157,7 @@ def preflight(config, destination):
     print(json.dumps(budget, indent=2))
 
 
-def prepare(jadx):
-    config = load_config(Path('config.cloud.yaml'))
+def prepare_apk(config, jadx):
     apk = Path('data/app.apk')
     download_apk(APK_URL, apk, APK_SHA)
     try:
@@ -166,6 +170,11 @@ def prepare(jadx):
         if metadata['status'] != 'partial_or_failed' or not config.input_dir.is_dir():
             raise
         print('JADX returned partial output; proceeding with the explicit partial-decompilation warning.', flush=True)
+
+
+def prepare(jadx):
+    config = load_config(Path('config.cloud.yaml'))
+    prepare_apk(config, jadx)
     freeze(config, Path('runs'))
 
 

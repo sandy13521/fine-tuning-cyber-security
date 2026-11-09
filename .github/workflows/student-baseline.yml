@@ -1,0 +1,67 @@
+name: Student baseline
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [experiment/student-baseline]
+    paths: [.github/workflows/student-baseline.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: groq-student-baseline
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check student credential
+        env:
+          STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
+        run: |
+          if [ -z "$STUDENT_API_KEY" ]; then
+            echo "::error::Add the Groq API key as STUDENT_API_KEY (or GROQ_API_KEY) in repository Actions secrets."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[tokens]'
+      - name: Run offline tests
+        run: python -m unittest discover -s tests -v
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install pinned JADX release
+        run: |
+          curl --fail --location --retry 3 https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip --output /tmp/jadx.zip
+          unzip -q /tmp/jadx.zip -d /tmp/jadx
+          chmod +x /tmp/jadx/bin/jadx
+      - name: Freeze source and check the token allowance
+        shell: bash
+        run: python scripts/cloud_student.py --jadx /tmp/jadx/bin/jadx | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Run the student without lessons
+        env:
+          STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
+        run: |
+          cyber-scan scan --config config.student.yaml --plan runs/student-plan/full-plan \
+            --output runs/student-baseline --role student --delay-seconds 60
+      - name: Preserve baseline and frozen inputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-baseline
+          path: |
+            runs/student-baseline
+            runs/student-plan/full-plan
+            runs/student-plan/budget.json
+            runs/student-plan/teacher-inventory.json
+          retention-days: 14
+          if-no-files-found: ignore

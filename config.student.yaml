@@ -1,0 +1,16 @@
+input_dir: data/cloud/decompiled
+output_dir: runs
+tokenizer: tiktoken:o200k_harmony
+bundle_token_budget: 2300
+context_char_budget: 0
+models:
+  student:
+    model: openai/gpt-oss-20b
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: STUDENT_API_KEY
+    token_parameter: max_completion_tokens
+    max_output_tokens: 1500
+    response_format: json_object
+    reasoning_effort: low
+    timeout_seconds: 90
+    retries: 0
