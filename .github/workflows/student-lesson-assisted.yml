@@ -17,7 +17,7 @@ jobs:
   student:
     if: ${{ github.run_attempt == 1 }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,8 +47,13 @@ jobs:
         with:
           name: student-lesson-assisted
           path: runs
-          run-id: 42651912306
+          run-id: 42652195731
           github-token: ${{ github.token }}
+      - name: Wait for the reported Groq quota reset
+        run: |
+          retry_at=$(date -u -d '2026-11-09T16:59:33Z' +%s)
+          remaining=$((retry_at - $(date -u +%s)))
+          if [ "$remaining" -gt 0 ]; then sleep "$remaining"; fi
       - name: Resume the student with the same lesson prompt
         env:
           STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
