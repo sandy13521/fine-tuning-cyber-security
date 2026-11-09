@@ -8,6 +8,11 @@ from ..schemas import ModelResponse
 class ModelError(RuntimeError):
     pass
 
+
+class ModelOutputError(ModelError):
+    """The provider rejected the generated output for an individual request."""
+
+
 def strict_json_schema(schema):
     """Strict structured output requires all declared properties, including nullable ones."""
     if isinstance(schema, list):
@@ -30,7 +35,7 @@ def provider_error_code(response):
         return None
     allowed = {'insufficient_quota', 'rate_limit_exceeded', 'invalid_api_key',
                'model_not_found', 'permission_denied', 'billing_hard_limit_reached',
-               'credit_balance_exhausted'}
+               'credit_balance_exhausted', 'json_validate_failed', 'structured_generation_failed'}
     return next((code for code in codes if isinstance(code, str) and code in allowed), None)
 
 
@@ -98,6 +103,8 @@ class OpenAICompatibleClient:
                 error_code = provider_error_code(response) if not response.is_success else None
                 if error_code in {'insufficient_quota', 'billing_hard_limit_reached', 'credit_balance_exhausted'}:
                     raise ModelError(f"Provider returned HTTP {response.status_code} ({error_code})")
+                if response.status_code == 400 and error_code in {'json_validate_failed', 'structured_generation_failed'}:
+                    raise ModelOutputError(f"Provider rejected generated output ({error_code})")
                 if response.status_code == 429 or response.status_code >= 500:
                     if attempt < config.retries:
                         time.sleep(retry_delay(response, attempt))

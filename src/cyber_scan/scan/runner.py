@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from ..config import StrictModel
 from ..schemas import Finding
 from ..models import create_client
-from ..models.openai_compatible import ModelError
+from ..models.openai_compatible import ModelError, ModelOutputError
 from ..ingest.pipeline import digest, write_json
 from .plan import load_plan, primary_files
 from .prompts import SYSTEM_PROMPT, messages_for
@@ -192,6 +192,8 @@ def run_scan(config, plan_path, output, role='teacher', resume=False, retry_fail
             try:
                 response = client.generate(messages, response_schema=schema)
                 record.update(review_response(response, unit))
+            except ModelOutputError as exc:
+                record.update(status='invalid_response', error=str(exc))
             except ModelError as exc:
                 record.update(status='provider_error', error=str(exc))
             atomic_json(path, record)

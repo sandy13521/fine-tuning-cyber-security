@@ -2,12 +2,21 @@ name: Student baseline
 
 on:
   workflow_dispatch:
+    inputs:
+      resume_run_id:
+        description: 'Optional previous baseline Actions run ID to resume'
+        type: string
+        required: false
   push:
     branches: [experiment/student-baseline]
     paths: [.github/workflows/student-baseline.yml]
 
 permissions:
   contents: read
+  actions: read
+
+env:
+  RESUME_RUN_ID: ${{ inputs.resume_run_id || (github.event_name == 'push' && '42625633439') || '' }}
 
 concurrency:
   group: groq-student-baseline
@@ -36,23 +45,38 @@ jobs:
       - name: Run offline tests
         run: python -m unittest discover -s tests -v
       - uses: actions/setup-java@v4
+        if: ${{ !env.RESUME_RUN_ID }}
         with:
           distribution: temurin
           java-version: '21'
       - name: Install pinned JADX release
+        if: ${{ !env.RESUME_RUN_ID }}
         run: |
           curl --fail --location --retry 3 https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip --output /tmp/jadx.zip
           unzip -q /tmp/jadx.zip -d /tmp/jadx
           chmod +x /tmp/jadx/bin/jadx
       - name: Freeze source and check the token allowance
+        if: ${{ !env.RESUME_RUN_ID }}
         shell: bash
         run: python scripts/cloud_student.py --jadx /tmp/jadx/bin/jadx | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Restore the frozen plan and completed student responses
+        if: ${{ env.RESUME_RUN_ID }}
+        uses: actions/download-artifact@v4
+        with:
+          name: student-baseline
+          path: runs
+          run-id: ${{ env.RESUME_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Run the student without lessons
         env:
           STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
         run: |
+          resume=()
+          if [ -n "$RESUME_RUN_ID" ]; then
+            resume=(--resume --retry-failed)
+          fi
           cyber-scan scan --config config.student.yaml --plan runs/student-plan/full-plan \
-            --output runs/student-baseline --role student --delay-seconds 60
+            --output runs/student-baseline --role student --delay-seconds 60 "${resume[@]}"
       - name: Preserve baseline and frozen inputs
         if: always()
         uses: actions/upload-artifact@v4
