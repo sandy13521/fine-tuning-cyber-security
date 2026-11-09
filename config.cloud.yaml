@@ -1,16 +1,18 @@
 input_dir: data/cloud/decompiled
 output_dir: runs
 bundle_token_budget: 12000
-context_char_budget: 12000
+context_char_budget: 0
 tokenizer: utf8_bytes
 models:
   teacher:
     provider: openai_compatible
-    model: gpt-4.1
+    model: gpt-6-luna
     base_url: https://api.openai.com/v1
     api_key_env: TEACHER_API_KEY
     token_parameter: max_completion_tokens
-    max_output_tokens: 16384
+    max_output_tokens: 4096
+    reasoning_effort: low
+    service_tier: flex
     response_format: json_schema
     timeout_seconds: 300
-    retries: 4
+    retries: 0

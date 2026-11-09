@@ -69,22 +69,17 @@ Validation: 36 offline tests passed, including source integrity, long-line/windo
 
 ## GitHub Actions cloud run
 
-The **OpenAI teacher scan** workflow uses the repository Actions secret `TEACHER_API_KEY`.
-`config.cloud.yaml` selects `gpt-4.1`, strict structured output, and a 16,384-token completion budget. No temperature override is sent. The first scan request verifies account model access and billing. Model documentation: https://developers.openai.com/api/docs/models/gpt-4.1.
+In **Actions → OpenAI teacher scan → Run workflow**, leave `run_paid_scan` unchecked for an offline preflight. To send the selected source to OpenAI, enable `run_paid_scan` and set the repository Actions secret `TEACHER_API_KEY`. Git pushes and GitHub's **Re-run jobs** button do not start paid jobs on this workflow version.
 
-The workflow starts when its YAML file is pushed to main (including initial setup), or manually under **Actions → OpenAI teacher scan → Run workflow**. It downloads the pinned public InsecureShop v1.0 APK, verifies its known SHA-256, runs JADX 1.5.6, preserves any partial-decompilation warning, freezes all supported text, and partitions requests into eight disjoint jobs. Partial JADX output is allowed only when a nonzero exit is recorded and extracted source exists; a timeout or missing output fails setup.
+Preparation downloads the pinned public InsecureShop APK, verifies its SHA-256, runs JADX 1.5.6, and inventories all supported decompiled text. The focused scope includes app-owned code except generated resource IDs, the manifest, manifest-declared component classes, text assets, XML/raw resources, default strings, and referenced layouts, menus, and navigation resources. The inventory records which files were selected. Unselected libraries and resources can contain issues outside this review's coverage. Decompilation warnings and original ingestion exclusions remain visible.
 
-The first run starts the full teacher scan automatically. It incurs API charges for actual usage. Each shard checkpoints each completed response. The command timeout allows artifact-upload time before the job timeout. Persistent provider errors stop the affected shard, and report aggregation marks missing/failed requests incomplete. Findings remain unconfirmed pending review.
+`config.cloud.yaml` uses [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) with Flex processing, low reasoning, strict structured output, and 4,096 completion tokens per request. Eight groups run one at a time and share manifest context. The preflight verifies shard coverage and rejects plans whose estimated total exceeds **$0.05**, using serialized request bytes as a conservative proxy for input tokens and reserving the full output allowance. This is a workflow estimate. OpenAI bills actual usage. Flex availability and model access depend on the account and provider. Each job attempts its request once with no higher-priced fallback.
 
 Artifacts are retained for 14 days:
 
-- `teacher-plan`: complete frozen plan and eight shard plans.
+- `teacher-plan`: frozen full and shard plans, `full-plan/cost.json`, and `teacher-inventory.json`.
 - `teacher-setup`: JADX status and logs.
-- `teacher-results-0` through `teacher-results-7`: request/response records, checkpoints, and per-shard summaries.
-- `teacher-combined-report`: combined summary, source-consistent findings, rejections and duplicate details.
+- `teacher-results-0` through `teacher-results-7`: request/response records, checkpoints, and shard summaries.
+- `teacher-combined-report`: combined summary, source-consistent candidates, rejections, and duplicate details. Candidate counts do not establish exploitability or recall.
 
-To resume an interrupted run, manually run the workflow with its previous Actions **run ID** in `resume_run_id`. Keep the same model config, scanner version and prompt. The workflow restores the original frozen plan and each shard's checkpoints; completed requests are not repeated. Failed attempts are archived and retried. If a shard never produced an artifact, a full automatic restore cannot succeed; download the available records and recover deliberately. Artifacts must still exist within retention. Manually cancelled workflows may be unable to finish artifact uploads.
-
-Repository secret values are never read back into the chat.
-
-The current cloud workflow groups the frozen primary source spans into **50 model requests**. It keeps all ingested text and original line references, shares the manifest across groups, and estimates sizes with the `o200k_base` tokenizer. Eight checkpoint shards run one at a time. Setup makes no model requests. Transient HTTP errors can trigger additional attempts for the same group. A grouped run has a new plan identity and cannot reuse responses from the prior one-file-per-request plan.
+To resume an interrupted paid run, start a new manual dispatch with `run_paid_scan` enabled and the previous run ID in `resume_run_id`. The same focused plan, model settings, and checkpoints are required. Completed requests are reused. Failed units may incur a new charge on an explicit resume, and a missing shard artifact must be recovered separately. Start without a resume ID for a fresh run or after an offline preflight.

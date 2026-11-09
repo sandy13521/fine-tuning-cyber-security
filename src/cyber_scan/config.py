@@ -17,6 +17,8 @@ class ModelConfig(StrictModel):
     max_output_tokens: int = Field(default=4096, gt=0)
     token_parameter: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
     temperature: float | None = None
+    reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    service_tier: Literal["default", "flex"] | None = None
     response_format: Literal["prompt", "json_object", "json_schema"] = "prompt"
 
     @field_validator("base_url")

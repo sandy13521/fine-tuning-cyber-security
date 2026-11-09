@@ -52,6 +52,25 @@ def retry_delay(response, attempt):
     return min(max([0, *hints] if hints else [fallback]), 300)
 
 
+def chat_payload(config, messages, response_schema):
+    messages = [dict(message) for message in messages]
+    payload = {"model": config.model, "messages": messages,
+               config.token_parameter: config.max_output_tokens}
+    if config.temperature is not None:
+        payload["temperature"] = config.temperature
+    if config.reasoning_effort is not None:
+        payload["reasoning_effort"] = config.reasoning_effort
+    if config.service_tier is not None:
+        payload["service_tier"] = config.service_tier
+    if response_schema:
+        messages.append({"role": "system", "content": "Return only valid JSON matching this schema: " + json.dumps(response_schema)})
+        if config.response_format == "json_schema":
+            payload["response_format"] = {"type": "json_schema", "json_schema": {"name": "result", "schema": strict_json_schema(response_schema), "strict": True}}
+        elif config.response_format == "json_object":
+            payload["response_format"] = {"type": "json_object"}
+    return payload
+
+
 class OpenAICompatibleClient:
     def __init__(self, config, transport=None):
         self.config = config
@@ -64,17 +83,7 @@ class OpenAICompatibleClient:
             raise ModelError(f"Set environment variable {config.api_key_env}")
         if config.model.startswith("REPLACE_"):
             raise ModelError("Choose a real model ID in configuration")
-        messages = [dict(message) for message in messages]
-        payload = {"model": config.model, "messages": messages,
-                   config.token_parameter: config.max_output_tokens}
-        if config.temperature is not None:
-            payload["temperature"] = config.temperature
-        if response_schema:
-            messages.append({"role": "system", "content": "Return only valid JSON matching this schema: " + json.dumps(response_schema)})
-            if config.response_format == "json_schema":
-                payload["response_format"] = {"type": "json_schema", "json_schema": {"name": "result", "schema": strict_json_schema(response_schema), "strict": True}}
-            elif config.response_format == "json_object":
-                payload["response_format"] = {"type": "json_object"}
+        payload = chat_payload(config, messages, response_schema)
         start = time.monotonic()
         with httpx.Client(timeout=config.timeout_seconds, transport=self.transport, follow_redirects=False) as client:
             for attempt in range(config.retries + 1):

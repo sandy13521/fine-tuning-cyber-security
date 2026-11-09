@@ -53,8 +53,11 @@ class ModelTests(unittest.TestCase):
             self.assertIn('max_completion_tokens',body)
             self.assertNotIn('max_tokens',body)
             self.assertEqual(body['response_format']['type'],'json_object')
+            self.assertEqual(body['service_tier'], 'flex')
+            self.assertEqual(body['reasoning_effort'], 'low')
             return httpx.Response(200,json={'choices':[{'message':{'content':'{}'}}]})
-        client=OpenAICompatibleClient(self.config(token_parameter='max_completion_tokens',response_format='json_object'),httpx.MockTransport(handler))
+        client=OpenAICompatibleClient(self.config(token_parameter='max_completion_tokens', response_format='json_object',
+                             service_tier='flex', reasoning_effort='low'), httpx.MockTransport(handler))
         client.generate([],{'type':'object'})
 
     def test_credential_url_rejected(self):

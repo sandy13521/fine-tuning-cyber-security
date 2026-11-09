@@ -1,11 +1,12 @@
 name: OpenAI teacher scan
 
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/teacher-scan.yml]
   workflow_dispatch:
     inputs:
+      run_paid_scan:
+        description: 'Send the budget-checked plan to OpenAI (unchecked = offline preflight only)'
+        type: boolean
+        default: false
       resume_run_id:
         description: 'Optional prior Actions run ID to resume (same frozen plan and model config)'
         required: false
@@ -30,7 +31,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -e '.[tokens]'
+      - run: python -m pip install -e .
       - name: Run offline tests
         run: python -m unittest discover -s tests -v
       - uses: actions/setup-java@v4
@@ -44,7 +45,7 @@ jobs:
           curl --fail --location --retry 3 https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip --output /tmp/jadx.zip
           unzip -q /tmp/jadx.zip -d /tmp/jadx
           chmod +x /tmp/jadx/bin/jadx
-      - name: Decompile and freeze all supported source
+      - name: Decompile and freeze focused teacher scope
         if: ${{ !inputs.resume_run_id }}
         run: python scripts/cloud_teacher.py prepare --jadx /tmp/jadx/bin/jadx
       - name: Restore frozen plan for resume
@@ -55,12 +56,16 @@ jobs:
           path: runs
           run-id: ${{ inputs.resume_run_id }}
           github-token: ${{ github.token }}
+      - name: Enforce the cost budget before enabling paid jobs
+        shell: bash
+        run: python scripts/cloud_teacher.py preflight | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: teacher-plan
           path: |
             runs/full-plan
             runs/shards
+            runs/teacher-inventory.json
           retention-days: 14
           if-no-files-found: error
       - name: Preserve setup diagnostics
@@ -74,6 +79,7 @@ jobs:
           retention-days: 14
 
   scan:
+    if: ${{ inputs.run_paid_scan && github.run_attempt == 1 }}
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 330
@@ -102,7 +108,7 @@ jobs:
           path: cloud-results/${{ matrix.shard }}
           run-id: ${{ inputs.resume_run_id }}
           github-token: ${{ github.token }}
-      - name: Run GPT-4.1 teacher scan on every assigned unit
+      - name: Run GPT-6 Luna Flex on the assigned source
         env:
           TEACHER_API_KEY: ${{ secrets.TEACHER_API_KEY }}
         run: |
@@ -119,7 +125,7 @@ jobs:
           if-no-files-found: warn
 
   report:
-    if: ${{ always() && needs.prepare.result == 'success' }}
+    if: ${{ always() && inputs.run_paid_scan && github.run_attempt == 1 && needs.prepare.result == 'success' }}
     needs: [prepare, scan]
     runs-on: ubuntu-latest
     timeout-minutes: 20

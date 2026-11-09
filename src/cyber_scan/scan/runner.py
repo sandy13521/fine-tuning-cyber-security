@@ -153,7 +153,9 @@ def run_scan(config, plan_path, output, role='teacher', resume=False, retry_fail
         client = create_client(model)
     schema = ScanResponse.model_json_schema()
     identity = {'runner_version': 1, 'plan_id': plan['plan_id'], 'role': role,
-                'model': model.model_dump(mode='json'), 'prompt': SYSTEM_PROMPT, 'response_schema': schema}
+                'model': model.model_dump(mode='json', exclude={
+                    name for name in ('reasoning_effort', 'service_tier') if getattr(model, name) is None
+                }), 'prompt': SYSTEM_PROMPT, 'response_schema': schema}
     if output.exists():
         if not resume:
             raise ValueError('Scan output exists; use --resume or choose a new directory')

@@ -73,7 +73,7 @@ def windows(path, text, count, budget, overlap=10):
         start = max(start + 1, end - overlap)
 
 
-def build_plan(config, ingest_dir, output):
+def build_plan(config, ingest_dir, output, *, selected_paths=None):
     if output.exists():
         raise ValueError('Plan output already exists; use a fresh directory')
     if config.input_dir.resolve() == output.resolve() or config.input_dir.resolve() in output.resolve().parents:
@@ -87,21 +87,26 @@ def build_plan(config, ingest_dir, output):
     budget = settings['bundle_token_budget']
     source = {item['path']: read_source(config.input_dir, item)
               for item in inventory if item['status'] == 'loaded'}
+    selected = set(source) if selected_paths is None else set(selected_paths)
+    if not selected <= source.keys():
+        raise ValueError('Selected files must be present in the ingestion inventory')
     units = []
     primaries = set()
     for line in (ingest_dir / 'bundles.jsonl').read_text().splitlines():
         bundle = json.loads(line)
+        if bundle['primary'] not in selected:
+            continue
         if bundle['primary'] in primaries:
             raise ValueError('Duplicate primary file in ingestion bundles')
         primaries.add(bundle['primary'])
         reconstructed = '\n\n'.join(render(path, source[path]) for path in bundle['files'])
         if reconstructed != bundle['content'] or digest(reconstructed.encode()) != bundle['id']:
             raise ValueError('Ingestion bundle does not match source hashes')
-        spans = [segment(path, '\n'.join(source[path].splitlines())) for path in bundle['files']]
+        spans = [segment(path, '\n'.join(source[path].splitlines())) for path in bundle['files'] if path in selected]
         content = '\n\n'.join(render_segment(span) for span in spans)
         units.append({'primary': bundle['primary'], 'kind': 'whole_file', 'segments': spans,
                       'content': content, 'omitted_related_files': bundle['omitted_related_files']})
-    oversized = sorted(set(source) - primaries)
+    oversized = sorted(selected - primaries)
     for path in oversized:
         for span in windows(path, source[path], count, budget):
             units.append({'primary': path, 'kind': 'oversized_window', 'segments': [span],
@@ -134,6 +139,10 @@ def build_plan(config, ingest_dir, output):
                        'Windows retain local overlap, not whole-program data flow.',
                        'Prompt/schema/output tokens are additional to bundle estimates.'],
     }
+    if selected_paths is not None:
+        report['scope'] = 'selected_ingested_files'
+        report['out_of_scope_files'] = len(source) - len(selected)
+        report['limitations'].append('Only selected primary files are planned for model review.')
     output.mkdir(parents=True)
     (output / 'units.jsonl').write_text(jsonl, encoding='utf-8')
     write_json(output / 'plan.json', report)
