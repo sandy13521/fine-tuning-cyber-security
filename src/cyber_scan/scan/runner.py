@@ -152,10 +152,14 @@ def run_scan(config, plan_path, output, role='teacher', resume=False, retry_fail
             raise ValueError(f'Set environment variable {model.api_key_env} before scanning')
         client = create_client(model)
     schema = ScanResponse.model_json_schema()
+    model_settings = model.model_dump(mode='json', exclude={
+        name for name in ('reasoning_effort', 'reasoning_format', 'service_tier')
+        if getattr(model, name) is None
+    })
+    if model.schema_in_prompt:
+        model_settings.pop('schema_in_prompt')
     identity = {'runner_version': 1, 'plan_id': plan['plan_id'], 'role': role,
-                'model': model.model_dump(mode='json', exclude={
-                    name for name in ('reasoning_effort', 'service_tier') if getattr(model, name) is None
-                }), 'prompt': SYSTEM_PROMPT, 'response_schema': schema}
+                'model': model_settings, 'prompt': SYSTEM_PROMPT, 'response_schema': schema}
     if output.exists():
         if not resume:
             raise ValueError('Scan output exists; use --resume or choose a new directory')

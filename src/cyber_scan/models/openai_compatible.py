@@ -65,10 +65,13 @@ def chat_payload(config, messages, response_schema):
         payload["temperature"] = config.temperature
     if config.reasoning_effort is not None:
         payload["reasoning_effort"] = config.reasoning_effort
+    if config.reasoning_format is not None:
+        payload["reasoning_format"] = config.reasoning_format
     if config.service_tier is not None:
         payload["service_tier"] = config.service_tier
     if response_schema:
-        messages.append({"role": "system", "content": "Return only valid JSON matching this schema: " + json.dumps(response_schema)})
+        if config.response_format != "json_schema" or config.schema_in_prompt:
+            messages.append({"role": "system", "content": "Return only valid JSON matching this schema: " + json.dumps(response_schema)})
         if config.response_format == "json_schema":
             payload["response_format"] = {"type": "json_schema", "json_schema": {"name": "result", "schema": strict_json_schema(response_schema), "strict": True}}
         elif config.response_format == "json_object":

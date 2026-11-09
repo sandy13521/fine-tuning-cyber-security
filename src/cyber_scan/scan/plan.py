@@ -170,7 +170,8 @@ def primary_files(unit):
     return unit.get('primary_files', [unit['primary']])
 
 
-def group_plan(source_path, output, request_count, tokenizer, input_budget):
+def group_plan(source_path, output, request_count, tokenizer, input_budget, *,
+               arrange_spans=None, review_focus=None):
     """Pack every primary source span into a fixed number of contiguous groups."""
     if output.exists():
         raise ValueError('Grouped plan output already exists')
@@ -180,7 +181,9 @@ def group_plan(source_path, output, request_count, tokenizer, input_budget):
     count = token_counter(tokenizer)
     spans = [span for unit in units for span in unit['segments']
              if span['file'] == unit['primary']]
-    # Keep the original app-first ordering. Use primary spans once and attach
+    if arrange_spans is not None:
+        spans = arrange_spans(spans)
+    # Keep the original app-first ordering by default. Use primary spans once and attach
     # the manifest as shared context for Android component reachability.
     manifests = [span for span in spans if PurePosixPath(span['file']).name == 'AndroidManifest.xml'
                  and span['start_line'] == 1 and not span['partial_line']
@@ -210,6 +213,8 @@ def group_plan(source_path, output, request_count, tokenizer, input_budget):
         unit = {'primary': files[0], 'primary_files': files, 'kind': 'grouped_files',
                 'segments': group_spans, 'content': content, 'omitted_related_files': [],
                 'sequence': index, 'tokens_or_estimate': tokens}
+        if review_focus:
+            unit['review_focus'] = review_focus
         unit['id'] = digest(json.dumps(unit, sort_keys=True).encode())
         groups.append(unit)
         remaining_weight -= weight
@@ -228,8 +233,8 @@ def group_plan(source_path, output, request_count, tokenizer, input_budget):
         'total_bundle_tokens_or_estimate': sum(u['tokens_or_estimate'] for u in groups),
         'max_bundle_tokens_or_estimate': max(u['tokens_or_estimate'] for u in groups),
         'limitations': source_plan['limitations'] + [
-            'Grouped requests include each primary span and shared manifest context. '
-            'Other cross-group relationships may be missed.',
+            'Grouped requests include primary source and shared manifest context. '
+            'Cross-group relationships may be missed.',
         ],
     }
     output.mkdir(parents=True)

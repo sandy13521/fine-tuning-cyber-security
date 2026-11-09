@@ -1,0 +1,25 @@
+input_dir: data/cloud/decompiled
+output_dir: runs
+tokenizer: tiktoken:o200k_base
+bundle_token_budget: 2600
+context_char_budget: 0
+exclude_globs:
+  - 'sources/*/databinding/*'
+  - 'sources/*/DataBinderMapperImpl.java'
+  - 'sources/*/DataBindingInfo.java'
+  - 'sources/*/BR.java'
+  - 'resources/res/layout*/*'
+  - 'resources/res/drawable*/*'
+models:
+  teacher:
+    model: qwen/qwen3.8-27b
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: STUDENT_API_KEY
+    token_parameter: max_completion_tokens
+    max_output_tokens: 2200
+    response_format: json_schema
+    reasoning_effort: low
+    reasoning_format: hidden
+    schema_in_prompt: false
+    timeout_seconds: 90
+    retries: 0

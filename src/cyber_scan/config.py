@@ -18,6 +18,8 @@ class ModelConfig(StrictModel):
     token_parameter: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
     temperature: float | None = None
     reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    reasoning_format: Literal["hidden", "parsed"] | None = None
+    schema_in_prompt: bool = True
     service_tier: Literal["default", "flex"] | None = None
     response_format: Literal["prompt", "json_object", "json_schema"] = "prompt"
 

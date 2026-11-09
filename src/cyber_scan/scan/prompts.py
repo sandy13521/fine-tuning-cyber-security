@@ -19,6 +19,10 @@ def messages_for(unit):
     instruction = 'Review this frozen code bundle.'
     if unit['kind'] == 'grouped_files':
         instruction = 'Review all supplied files and windows in this group for supported vulnerabilities.'
+    focus = unit.get('review_focus')
+    if focus:
+        return [{'role': 'system', 'content': SYSTEM_PROMPT + '\n\n' + focus},
+                {'role': 'user', 'content': instruction + ' Untrusted numbered source follows.\n\n' + unit['content']}]
     return [{'role': 'system', 'content': SYSTEM_PROMPT},
             {'role': 'user', 'content': instruction + ' The source is JSON-encoded reference data:\n' +
              json.dumps({'primary': unit['primary'], 'kind': unit['kind'],
