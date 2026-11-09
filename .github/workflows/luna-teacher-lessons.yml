@@ -35,7 +35,7 @@ jobs:
           path: runs
           run-id: 42638609995
           github-token: ${{ github.token }}
-      - name: Run the budgeted scan and synthesize lessons
+      - name: Run the budgeted scan and record provider error codes
         env:
           TEACHER_API_KEY: ${{ secrets.TEACHER_API_KEY }}
         run: python scripts/cloud_luna_lessons.py

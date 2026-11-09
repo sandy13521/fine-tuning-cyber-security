@@ -35,8 +35,19 @@ def provider_error_code(response):
         return None
     allowed = {'insufficient_quota', 'rate_limit_exceeded', 'invalid_api_key',
                'model_not_found', 'permission_denied', 'billing_hard_limit_reached',
-               'credit_balance_exhausted', 'json_validate_failed', 'structured_generation_failed'}
-    return next((code for code in codes if isinstance(code, str) and code in allowed), None)
+               'credit_balance_exhausted', 'json_validate_failed', 'structured_generation_failed',
+               'project_spend_limit_exceeded', 'organization_spend_limit_exceeded',
+               'organization_usage_limit_exceeded', 'usage_limit_exceeded', 'slow_down',
+               'flex_unavailable', 'resource_unavailable'}
+    code = next((code for code in codes if isinstance(code, str) and code in allowed), None)
+    message = error.get('message')
+    if code is None and response.status_code == 429 and isinstance(message, str):
+        message = message.lower().strip()
+        if message.startswith('resource unavailable') or (
+            'flex processing' in message and 'temporarily unavailable' in message
+        ):
+            return 'flex_unavailable'
+    return code
 
 
 def retry_delay(response, attempt):
