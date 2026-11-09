@@ -13,31 +13,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: List generative Llama models available to the student credential
+      - name: Check generative Llama model access
         env:
           STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
         run: |
-          python - <<'PY'
+          set -eu
+          test -n "$STUDENT_API_KEY" || { echo "The student credential is missing"; exit 1; }
+          curl --fail --silent --show-error --max-time 20 \
+            --header "Authorization: Bearer $STUDENT_API_KEY" \
+            https://api.groq.com/openai/v1/models --output "$RUNNER_TEMP/llama-models.json"
+          python - "$RUNNER_TEMP/llama-models.json" <<'PY'
           import json
-          import os
-          from urllib.error import HTTPError
-          from urllib.request import Request, urlopen
+          import sys
+          from pathlib import Path
 
+          models = {m['id']: m for m in json.loads(Path(sys.argv[1]).read_text())['data']}
           candidates = ('llama-3.1-8b-instant', 'llama-3.3-70b-versatile')
-          key = os.environ.get('STUDENT_API_KEY')
-          if not key:
-              raise SystemExit('The student credential is missing')
-          request = Request('https://api.groq.com/openai/v1/models',
-                            headers={'Authorization': 'Bearer ' + key})
-          try:
-              with urlopen(request, timeout=20) as response:
-                  available = {m['id']: m for m in json.load(response)['data']}
-          except HTTPError as error:
-              raise SystemExit(f'Groq model listing returned HTTP {error.code}') from None
           print(json.dumps({'generative_llama': [
-              {'model': model, 'listed': model in available,
-               'active': available.get(model, {}).get('active'),
-               'context_window': available.get(model, {}).get('context_window')}
+              {'model': model, 'listed': model in models, 'active': models.get(model, {}).get('active')}
               for model in candidates
           ]}))
           PY
