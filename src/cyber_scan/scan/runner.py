@@ -139,7 +139,7 @@ def summarize(plan, units, output):
 
 
 def run_scan(config, plan_path, output, role='teacher', resume=False, retry_failed=False,
-             max_requests=None, delay_seconds=0, client=None, progress=None):
+             max_requests=None, delay_seconds=0, client=None, progress=None, *, system_appendix=''):
     plan, units = load_plan(plan_path)
     model = config.models.get(role)
     if model is None:
@@ -160,6 +160,8 @@ def run_scan(config, plan_path, output, role='teacher', resume=False, retry_fail
         model_settings.pop('schema_in_prompt')
     identity = {'runner_version': 1, 'plan_id': plan['plan_id'], 'role': role,
                 'model': model_settings, 'prompt': SYSTEM_PROMPT, 'response_schema': schema}
+    if system_appendix:
+        identity['system_appendix'] = system_appendix
     if output.exists():
         if not resume:
             raise ValueError('Scan output exists; use --resume or choose a new directory')
@@ -192,6 +194,8 @@ def run_scan(config, plan_path, output, role='teacher', resume=False, retry_fail
                 history.mkdir(parents=True, exist_ok=True)
                 path.rename(history / (str(time.time_ns()) + '.json'))
             messages = messages_for(unit)
+            if system_appendix:
+                messages[0]['content'] += '\n\n' + system_appendix
             record = {'unit_id': unit['id'], 'primary': unit['primary'], 'messages': messages}
             try:
                 response = client.generate(messages, response_schema=schema)
