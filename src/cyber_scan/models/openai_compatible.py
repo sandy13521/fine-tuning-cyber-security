@@ -41,6 +41,11 @@ def provider_error_code(response):
                'flex_unavailable', 'resource_unavailable'}
     code = next((code for code in codes if isinstance(code, str) and code in allowed), None)
     message = error.get('message')
+    if response.status_code == 429 and isinstance(message, str) and code in (None, 'rate_limit_exceeded'):
+        limit = re.search(r'\b(tokens|requests) per (day|minute)\b', message, re.IGNORECASE)
+        if limit:
+            unit, period = (value.lower() for value in limit.groups())
+            return f'rate_limit_{unit}_per_{period}'
     if code is None and response.status_code == 429 and isinstance(message, str):
         message = message.lower().strip()
         if message.startswith('resource unavailable') or (
@@ -125,7 +130,11 @@ class OpenAICompatibleClient:
                         continue
                 if not response.is_success:
                     # Never echo provider bodies: they can contain request data or credentials.
-                    raise ModelError(f"Provider returned HTTP {response.status_code}" + (f" ({error_code})" if error_code else ""))
+                    detail = f" ({error_code})" if error_code else ""
+                    retry_after = response.headers.get("retry-after", "")
+                    if response.status_code == 429 and re.fullmatch(r"[0-9]{1,6}(?:\.[0-9]{1,3})?", retry_after):
+                        detail += f" [retry-after {retry_after}s]"
+                    raise ModelError(f"Provider returned HTTP {response.status_code}{detail}")
                 try:
                     body = response.json()
                     choice = body["choices"][0]

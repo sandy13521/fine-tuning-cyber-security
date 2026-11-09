@@ -42,10 +42,17 @@ jobs:
           path: runs
           run-id: 42643352316
           github-token: ${{ github.token }}
-      - name: Run the student with the lesson prompt
+      - name: Restore the lesson-assisted checkpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: student-lesson-assisted
+          path: runs
+          run-id: 42650717850
+          github-token: ${{ github.token }}
+      - name: Resume the student with the same lesson prompt
         env:
           STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
-        run: python scripts/cloud_student_lessons.py
+        run: python scripts/cloud_student_lessons.py --resume
       - name: Preserve the student comparison
         if: always()
         uses: actions/upload-artifact@v4
