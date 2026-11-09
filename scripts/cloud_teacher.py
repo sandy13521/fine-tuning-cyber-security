@@ -7,10 +7,11 @@ import sys
 from cyber_scan.config import load_config
 from cyber_scan.ingest.apk import download_apk, decompile
 from cyber_scan.ingest.pipeline import ingest, digest, write_json
-from cyber_scan.scan.plan import build_plan, load_plan
+from cyber_scan.scan.plan import build_plan, group_plan, load_plan, primary_files
 from cyber_scan.scan.runner import run_scan
 
 SHARDS = 8
+REQUESTS = 50
 APK_URL = 'https://github.com/hax0rgb/InsecureShop/releases/download/v1.0/InsecureShop.apk'
 APK_SHA = 'a83298ae4a37fcab8101e8b41e513dd2199af71a94ea537d556a318e07d4d1bd'
 
@@ -27,7 +28,7 @@ def partition(plan_path, destination, shards=SHARDS):
         checksum = digest(raw.encode())
         metadata = {**parent, 'parent_plan_id': parent['plan_id'], 'plan_id': checksum,
                     'units_sha256': checksum, 'unit_count': len(selected),
-                    'primary_files_in_plan': len({unit['primary'] for unit in selected}),
+                    'primary_files_in_plan': len({file for unit in selected for file in primary_files(unit)}),
                     'scope': f'all_ingested_files_partition_{index}_of_{shards}',
                     'total_bundle_tokens_or_estimate': sum(unit['tokens_or_estimate'] for unit in selected),
                     'shard_index': index, 'shard_count': shards}
@@ -51,16 +52,19 @@ def prepare(jadx):
             raise
         print('JADX returned partial output; proceeding with the explicit partial-decompilation warning.', flush=True)
     source, _ = ingest(config)
-    report = build_plan(config, source, Path('runs/full-plan'))
+    build_plan(config, source, Path('runs/source-plan'))
+    report = group_plan(Path('runs/source-plan'), Path('runs/full-plan'), REQUESTS,
+                        'tiktoken:o200k_base', 160_000)
     partition(Path('runs/full-plan'), Path('runs/shards'))
-    print(json.dumps({key: report[key] for key in ('plan_id', 'unit_count', 'loaded_files', 'warnings')}, indent=2))
+    print(json.dumps({key: report[key] for key in ('plan_id', 'unit_count', 'loaded_files', 'total_bundle_tokens_or_estimate',
+                                              'max_bundle_tokens_or_estimate', 'warnings')}, indent=2))
 
 
 def scan(index):
     config = load_config(Path('config.cloud.yaml'))
     output = Path('cloud-results') / str(index)
     report = run_scan(config, Path('cloud-plan/shards') / str(index), output,
-                      resume=(output / 'run.json').exists(), retry_failed=True,
+                      resume=(output / 'run.json').exists(), retry_failed=True, delay_seconds=10,
                       progress=lambda item: print(json.dumps(item), flush=True))
     print(json.dumps({key: report[key] for key in ('status', 'completed_units', 'planned_units', 'accepted_unique_findings')}, indent=2))
     return 0 if report['status'] == 'completed' else 1

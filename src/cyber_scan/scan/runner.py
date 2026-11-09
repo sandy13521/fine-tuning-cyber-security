@@ -8,7 +8,7 @@ from ..schemas import Finding
 from ..models import create_client
 from ..models.openai_compatible import ModelError
 from ..ingest.pipeline import digest, write_json
-from .plan import load_plan
+from .plan import load_plan, primary_files
 from .prompts import SYSTEM_PROMPT, messages_for
 from pydantic import Field
 
@@ -30,7 +30,11 @@ def evidence_errors(finding, unit):
             lines = segment['text'].split('\n')
             first = span.start_line - segment['start_line']
             last = span.end_line - segment['start_line'] + 1
-            if span.snippet in '\n'.join(lines[first:last]):
+            source = '\n'.join(lines[first:last])
+            # Compare indentation independently while preserving interior whitespace.
+            normalized_snippet = '\n'.join(line.strip() for line in span.snippet.split('\n'))
+            normalized_source = '\n'.join(line.strip() for line in lines[first:last])
+            if span.snippet in source or (normalized_snippet.strip() and normalized_snippet in normalized_source):
                 consistent = True
         if not consistent:
             errors.append(name + ': snippet absent from cited lines')
@@ -92,7 +96,7 @@ def summarize(plan, units, output):
         reasons[status] = reasons.get(status, 0) + 1
         if status in {'completed', 'completed_with_rejections'}:
             successes += 1
-            checked_files.add(unit['primary'])
+            checked_files.update(primary_files(unit))
         else:
             failed.append({'unit_id': unit['id'], 'primary': unit['primary'], 'status': status})
         response = record.get('response', {})
@@ -114,7 +118,8 @@ def summarize(plan, units, output):
                 unique[key] = item
                 accepted.append(item)
     unsuccessful_ids = set(missing) | {item['unit_id'] for item in failed}
-    unsuccessful = {unit['primary'] for unit in units if unit['id'] in unsuccessful_ids}
+    unsuccessful = {file for unit in units if unit['id'] in unsuccessful_ids
+                    for file in primary_files(unit)}
     report = {'plan_id': plan['plan_id'], 'planned_units': len(units), 'completed_units': successes,
               'status': 'completed' if successes == len(units) else 'incomplete',
               'failed_units': failed, 'pending_unit_ids': missing, 'response_status_counts': reasons,
@@ -190,7 +195,7 @@ def run_scan(config, plan_path, output, role='teacher', resume=False, retry_fail
             atomic_json(path, record)
             called += 1
             if progress:
-                progress({'requests_this_run': called, 'unit': unit['id'], 'primary': unit['primary'], 'status': record['status']})
+                progress({'requests_this_run': called, 'unit': unit['id'], 'primary': unit['primary'], 'status': record['status'], **({'error': record['error']} if 'error' in record else {})})
             # Abort systemic failures rather than send thousands of doomed requests.
             if record['status'] == 'provider_error':
                 break

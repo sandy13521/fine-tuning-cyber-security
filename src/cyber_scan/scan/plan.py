@@ -154,3 +154,76 @@ def load_plan(path):
         if content != unit['content'] or digest(json.dumps(identity, sort_keys=True).encode()) != unit['id']:
             raise ValueError('Scan unit integrity check failed')
     return metadata, units
+
+
+def primary_files(unit):
+    """Return coverage targets, excluding any supplemental context."""
+    return unit.get('primary_files', [unit['primary']])
+
+
+def group_plan(source_path, output, request_count, tokenizer, input_budget):
+    """Pack every primary source span into a fixed number of contiguous groups."""
+    if output.exists():
+        raise ValueError('Grouped plan output already exists')
+    source_plan, units = load_plan(source_path)
+    if not 1 <= request_count <= len(units):
+        raise ValueError('Request count must be between one and the number of source units')
+    count = token_counter(tokenizer)
+    spans = [span for unit in units for span in unit['segments']
+             if span['file'] == unit['primary']]
+    # Keep the original app-first ordering. Use primary spans once and attach
+    # the manifest as shared context for Android component reachability.
+    manifests = [span for span in spans if PurePosixPath(span['file']).name == 'AndroidManifest.xml'
+                 and span['start_line'] == 1 and not span['partial_line']
+                 and sum(s['file'] == span['file'] for s in spans) == 1]
+    weights = [count(render_segment(span)) for span in spans]
+    remaining_weight = sum(weights)
+    groups = []
+    start = 0
+    for index in range(request_count):
+        remaining_groups = request_count - index
+        target = remaining_weight / remaining_groups
+        limit = len(spans) - remaining_groups + 1
+        end = start + 1
+        weight = weights[start]
+        while end < limit and (remaining_groups == 1 or
+                               abs(weight + weights[end] - target) <= abs(weight - target)):
+            weight += weights[end]
+            end += 1
+        primary_spans = spans[start:end]
+        files = list(dict.fromkeys(span['file'] for span in primary_spans))
+        context = [span for span in manifests if span['file'] not in files]
+        group_spans = primary_spans + context
+        content = '\n\n'.join(render_segment(span) for span in group_spans)
+        tokens = count(content)
+        if tokens > input_budget:
+            raise ValueError(f'Group {index + 1} uses {tokens} source tokens, above {input_budget}')
+        unit = {'primary': files[0], 'primary_files': files, 'kind': 'grouped_files',
+                'segments': group_spans, 'content': content, 'omitted_related_files': [],
+                'sequence': index, 'tokens_or_estimate': tokens}
+        unit['id'] = digest(json.dumps(unit, sort_keys=True).encode())
+        groups.append(unit)
+        remaining_weight -= weight
+        start = end
+    if start != len(spans) or {p for u in groups for p in primary_files(u)} != {
+        unit['primary'] for unit in units
+    }:
+        raise ValueError('Grouped plan lost source coverage')
+    raw = ''.join(json.dumps(unit, sort_keys=True) + '\n' for unit in groups)
+    plan_id = digest(raw.encode())
+    metadata = {
+        **source_plan, 'source_plan_id': source_plan['plan_id'], 'plan_id': plan_id,
+        'units_sha256': plan_id, 'unit_count': len(groups),
+        'original_unit_count': len(units), 'tokenizer': tokenizer,
+        'is_estimate': True,
+        'total_bundle_tokens_or_estimate': sum(u['tokens_or_estimate'] for u in groups),
+        'max_bundle_tokens_or_estimate': max(u['tokens_or_estimate'] for u in groups),
+        'limitations': source_plan['limitations'] + [
+            'Grouped requests include each primary span and shared manifest context. '
+            'Other cross-group relationships may be missed.',
+        ],
+    }
+    output.mkdir(parents=True)
+    (output / 'units.jsonl').write_text(raw, encoding='utf-8')
+    write_json(output / 'plan.json', metadata)
+    return metadata

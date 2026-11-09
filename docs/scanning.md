@@ -70,7 +70,7 @@ Validation: 36 offline tests passed, including source integrity, long-line/windo
 ## GitHub Actions cloud run
 
 The **OpenAI teacher scan** workflow uses the repository Actions secret `TEACHER_API_KEY`.
-`config.cloud.yaml` selects `gpt-5.6-sol`, strict structured output, and a 16,384-token completion budget including reasoning. No temperature override is sent. Account model access and billing are verified by a small live smoke request first. Model documentation: https://developers.openai.com/api/docs/models/gpt-5.6-sol.
+`config.cloud.yaml` selects `gpt-5.6-sol`, strict structured output, and a 16,384-token completion budget including reasoning. No temperature override is sent. The first scan request verifies account model access and billing. Model documentation: https://developers.openai.com/api/docs/models/gpt-5.6-sol.
 
 The workflow starts when its YAML file is pushed to main (including initial setup), or manually under **Actions → OpenAI teacher scan → Run workflow**. It downloads the pinned public InsecureShop v1.0 APK, verifies its known SHA-256, runs JADX 1.5.6, preserves any partial-decompilation warning, freezes all supported text, and partitions requests into eight disjoint jobs. Partial JADX output is allowed only when a nonzero exit is recorded and extracted source exists; a timeout or missing output fails setup.
 
@@ -79,10 +79,12 @@ The first run starts the full teacher scan automatically. It incurs API charges 
 Artifacts are retained for 14 days:
 
 - `teacher-plan`: complete frozen plan and eight shard plans.
-- `teacher-setup`: smoke response, JADX status/logs.
+- `teacher-setup`: JADX status and logs.
 - `teacher-results-0` through `teacher-results-7`: request/response records, checkpoints, and per-shard summaries.
 - `teacher-combined-report`: combined summary, source-consistent findings, rejections and duplicate details.
 
 To resume an interrupted run, manually run the workflow with its previous Actions **run ID** in `resume_run_id`. Keep the same model config, scanner version and prompt. The workflow restores the original frozen plan and each shard's checkpoints; completed requests are not repeated. Failed attempts are archived and retried. If a shard never produced an artifact, a full automatic restore cannot succeed; download the available records and recover deliberately. Artifacts must still exist within retention. Manually cancelled workflows may be unable to finish artifact uploads.
 
-Repository secret values are never read back into the chat. A successful smoke check in Actions establishes that the configured key works; adding a secret alone does not verify it.
+Repository secret values are never read back into the chat.
+
+The current cloud workflow groups the frozen primary source spans into **50 model requests**. It keeps all ingested text and original line references, shares the manifest across groups, and estimates sizes with the `o200k_base` tokenizer. Eight checkpoint shards run one at a time. Setup makes no model requests. Transient HTTP errors can trigger additional attempts for the same group. A grouped run has a new plan identity and cannot reuse responses from the prior one-file-per-request plan.

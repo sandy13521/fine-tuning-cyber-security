@@ -63,7 +63,7 @@ The smoke test sends only a request to reply OK, not app code. It saves a reques
 
 ## Cloud teacher run
 
-Add `TEACHER_API_KEY` as a repository Actions secret. The [OpenAI teacher scan](../../actions/workflows/teacher-scan.yml) workflow runs GPT-5.6 Sol over all supported decompiled text in eight checkpointed jobs. The initial workflow push starts it automatically; subsequent runs can be started manually. See [cloud instructions](docs/scanning.md#github-actions-cloud-run) for artifacts and resuming. Live results depend on the Actions run; adding the workflow does not establish that the model scan succeeded.
+Add `TEACHER_API_KEY` as a repository Actions secret. The [OpenAI teacher scan](../../actions/workflows/teacher-scan.yml) workflow runs GPT-5.6 Sol over all supported decompiled text in 50 grouped requests across eight checkpointed jobs, run one at a time. The initial workflow push starts it automatically; subsequent runs can be started manually. See [cloud instructions](docs/scanning.md#github-actions-cloud-run) for artifacts and resuming. Live results depend on the Actions run; adding the workflow does not establish that the model scan succeeded.
 
 ## Full static scan
 

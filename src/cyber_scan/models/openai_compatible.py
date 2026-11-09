@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 import httpx
 from ..schemas import ModelResponse
@@ -24,12 +25,31 @@ def provider_error_code(response):
     # Fixed allowlist only: never log arbitrary provider response text or secrets.
     try:
         error = response.json().get('error', {})
-        code = error.get('code') or error.get('type')
+        codes = (error.get('code'), error.get('type'))
     except (ValueError, AttributeError, TypeError):
         return None
     allowed = {'insufficient_quota', 'rate_limit_exceeded', 'invalid_api_key',
-               'model_not_found', 'permission_denied', 'billing_hard_limit_reached'}
-    return code if isinstance(code, str) and code in allowed else None
+               'model_not_found', 'permission_denied', 'billing_hard_limit_reached',
+               'credit_balance_exhausted'}
+    return next((code for code in codes if isinstance(code, str) and code in allowed), None)
+
+
+def retry_delay(response, attempt):
+    """Allow a rate-limited minute to reset and respect provider wait hints."""
+    fallback = min(60 * (2 ** attempt), 300) if response.status_code == 429 else 2 ** attempt
+    hints = []
+    try:
+        hints.append(float(response.headers.get('retry-after', '')))
+    except ValueError:
+        pass
+    if response.status_code == 429:
+        for name in ('x-ratelimit-reset-tokens', 'x-ratelimit-reset-requests'):
+            raw = response.headers.get(name, '')
+            pieces = re.findall(r'(\d+(?:\.\d+)?)(ms|h|m|s)', raw)
+            if pieces and ''.join(number + unit for number, unit in pieces) == raw:
+                factors = {'ms': .001, 's': 1, 'm': 60, 'h': 3600}
+                hints.append(sum(float(number) * factors[unit] for number, unit in pieces))
+    return min(max([0, *hints] if hints else [fallback]), 300)
 
 
 class OpenAICompatibleClient:
@@ -67,15 +87,11 @@ class OpenAICompatibleClient:
                     time.sleep(min(2 ** attempt, 8))
                     continue
                 error_code = provider_error_code(response) if not response.is_success else None
-                if error_code in {'insufficient_quota', 'billing_hard_limit_reached'}:
+                if error_code in {'insufficient_quota', 'billing_hard_limit_reached', 'credit_balance_exhausted'}:
                     raise ModelError(f"Provider returned HTTP {response.status_code} ({error_code})")
                 if response.status_code == 429 or response.status_code >= 500:
                     if attempt < config.retries:
-                        try:
-                            delay = min(max(float(response.headers.get("retry-after", 2 ** attempt)), 0), 30)
-                        except ValueError:
-                            delay = 2 ** attempt
-                        time.sleep(delay)
+                        time.sleep(retry_delay(response, attempt))
                         continue
                 if not response.is_success:
                     # Never echo provider bodies: they can contain request data or credentials.

@@ -12,5 +12,5 @@ models:
     token_parameter: max_completion_tokens
     max_output_tokens: 16384
     response_format: json_schema
-    timeout_seconds: 180
-    retries: 2
+    timeout_seconds: 300
+    retries: 4

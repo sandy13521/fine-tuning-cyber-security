@@ -101,3 +101,11 @@ class ModelTests(unittest.TestCase):
     def test_error_code_allowlist(self):
         from cyber_scan.models.openai_compatible import provider_error_code
         self.assertIsNone(provider_error_code(httpx.Response(401,json={'error':{'code':'secret'}})))
+
+    def test_rate_limit_backoff_uses_reset_duration(self):
+        from cyber_scan.models.openai_compatible import retry_delay
+        reply = httpx.Response(429, headers={
+            'retry-after': '15', 'x-ratelimit-reset-tokens': '1m2.5s',
+        })
+        self.assertEqual(retry_delay(reply, 0), 62.5)
+        self.assertEqual(retry_delay(httpx.Response(429), 0), 60)

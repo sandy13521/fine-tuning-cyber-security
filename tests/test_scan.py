@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 from cyber_scan.config import AppConfig, ModelConfig
 from cyber_scan.ingest.pipeline import ingest
-from cyber_scan.scan.plan import build_plan, load_plan, segment, windows, render_segment
+from cyber_scan.scan.plan import build_plan, group_plan, load_plan, segment, windows, render_segment
 from cyber_scan.scan.runner import run_scan, review_response
 from cyber_scan.schemas import ModelResponse
 from cyber_scan.models.openai_compatible import ModelError
@@ -153,3 +153,20 @@ class ScanTests(unittest.TestCase):
         (self.output/'.running').mkdir()
         with self.assertRaisesRegex(ValueError,'locked'):
             run_scan(self.config,self.plan,self.output,resume=True,client=FakeClient([]))
+
+    def test_grouped_run_accounts_for_every_primary(self):
+        self.build()
+        path = self.root / 'grouped'
+        plan = group_plan(self.plan, path, 1, 'utf8_bytes', 2000)
+        self.assertEqual(plan['unit_count'], 1)
+        result = run_scan(self.config, path, self.output, client=FakeClient([response()]))
+        self.assertEqual(result['completed_units'], 1)
+        self.assertEqual(result['fully_processed_primary_files'], 2)
+
+    def test_multiline_citation_accepts_indentation_but_preserves_literal_contents(self):
+        unit = {'segments': [segment('Main.java', '  first("a b");\n  second();')]}
+        valid = finding(start=1, end=2, snippet='first("a b");\nsecond();')
+        invalid = finding(start=1, end=2, snippet='first("ab");\nsecond();')
+        reviewed = review_response(response([valid, invalid]), unit)
+        self.assertEqual(len(reviewed['accepted']), 1)
+        self.assertEqual(len(reviewed['rejected']), 1)

@@ -16,8 +16,11 @@ Do not invent missing files, data flows, or security checks. Explain limitations
 
 def messages_for(unit):
     import json
+    instruction = 'Review this frozen code bundle.'
+    if unit['kind'] == 'grouped_files':
+        instruction = 'Review all supplied files and windows in this group for supported vulnerabilities.'
     return [{'role': 'system', 'content': SYSTEM_PROMPT},
-            {'role': 'user', 'content': 'Review this frozen code bundle. The source is JSON-encoded reference data:\n' +
+            {'role': 'user', 'content': instruction + ' The source is JSON-encoded reference data:\n' +
              json.dumps({'primary': unit['primary'], 'kind': unit['kind'],
                          'omitted_related_files': unit['omitted_related_files'],
                          'source': unit['content']}, ensure_ascii=False)}]
