@@ -1,12 +1,16 @@
 """Compare lesson-assisted student inference on the completed baseline bundles."""
 import argparse
 import json
+import math
+import re
+import time
 from pathlib import Path
 
 from cloud_luna_lessons import LessonSet
 from cyber_scan.config import ModelConfig, load_config
 from cyber_scan.ingest.pipeline import digest, token_counter, write_json
-from cyber_scan.models.openai_compatible import chat_payload
+from cyber_scan.models import create_client
+from cyber_scan.models.openai_compatible import ModelError, chat_payload
 from cyber_scan.scan.plan import load_plan, primary_files
 from cyber_scan.scan.prompts import SYSTEM_PROMPT, messages_for
 from cyber_scan.scan.runner import ScanResponse, atomic_json, run_scan
@@ -88,6 +92,29 @@ def preflight(config, plan_path, baseline_path, lessons_path, matched_path):
     return appendix, comparison
 
 
+class StudentQuotaClient:
+    def __init__(self, client):
+        self.client = client
+        self.wait_budget = 900
+
+    def generate(self, messages, response_schema):
+        while True:
+            try:
+                return self.client.generate(messages, response_schema=response_schema)
+            except ModelError as exc:
+                match = re.fullmatch(
+                    r'Provider returned HTTP 429 \(rate_limit_(?:tokens|requests)_per_(?:day|minute)\) '
+                    r'\[retry-after ([0-9]+(?:\.[0-9]+)?)s\]', str(exc))
+                if not match:
+                    raise
+                delay = math.ceil(float(match[1])) + 2
+                if delay > min(300, self.wait_budget):
+                    raise
+                self.wait_budget -= delay
+                print(f'Groq quota reached. Waiting {delay} seconds before retrying the rejected request.', flush=True)
+                time.sleep(delay)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--resume', action='store_true')
@@ -104,7 +131,8 @@ if __name__ == '__main__':
                 history = OUTPUT / 'history' / record['unit_id']
                 history.mkdir(parents=True, exist_ok=True)
                 path.rename(history / f'quota-{len(list(history.glob("*.json")))}.json')
-    result = run_scan(config, MATCHED_PLAN, OUTPUT, role='student', resume=args.resume, delay_seconds=60,
+    client = StudentQuotaClient(create_client(config.models['student']))
+    result = run_scan(config, MATCHED_PLAN, OUTPUT, role='student', resume=args.resume, delay_seconds=60, client=client,
                       system_appendix=appendix, progress=lambda event: print(json.dumps(event), flush=True))
     atomic_json(OUTPUT / 'comparison.json', comparison)
     print(json.dumps({k: result[k] for k in ('status', 'completed_units', 'planned_units',

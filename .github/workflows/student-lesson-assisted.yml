@@ -47,7 +47,7 @@ jobs:
         with:
           name: student-lesson-assisted
           path: runs
-          run-id: 42650717850
+          run-id: 42651912306
           github-token: ${{ github.token }}
       - name: Resume the student with the same lesson prompt
         env:
