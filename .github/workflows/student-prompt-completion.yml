@@ -1,4 +1,4 @@
-name: Complete lesson-assisted GPT-OSS 20B scan
+name: Continue lesson-assisted GPT-OSS 20B after quota wait
 
 on:
   push:
@@ -47,9 +47,14 @@ jobs:
         with:
           name: student-lesson-assisted
           path: runs
-          run-id: 42684177132
+          run-id: 42685198301
           github-token: ${{ github.token }}
-      - name: Scan the remaining bundles with the same lesson prompt
+      - name: Wait until Groq's reported retry window
+        run: |
+          retry_at=$(date -u -d '2026-11-09T19:50:09Z' +%s)
+          remaining=$((retry_at - $(date -u +%s)))
+          if [ "$remaining" -gt 0 ]; then sleep "$remaining"; fi
+      - name: Scan unattempted bundles with the same lesson prompt
         env:
           STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
           PYTHONPATH: scripts
@@ -80,7 +85,7 @@ jobs:
 
           client = StudentQuotaClient(create_client(model))
           report = run_scan(config, MATCHED_PLAN, OUTPUT, role='student', resume=True,
-                            retry_failed=True, max_requests=22, delay_seconds=60,
+                            max_requests=19, delay_seconds=60,
                             system_appendix=appendix, client=client,
                             progress=lambda event: print(json.dumps(event), flush=True))
           atomic_json(OUTPUT / 'comparison.json', comparison)
