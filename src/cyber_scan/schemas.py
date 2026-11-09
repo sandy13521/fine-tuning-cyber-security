@@ -32,6 +32,9 @@ class Lesson(StrictModel):
     inspection_steps: list[str]
     reporting_threshold: str
 
+class LessonSet(StrictModel):
+    lessons: list[Lesson] = Field(min_length=1, max_length=16)
+
 class ModelResponse(StrictModel):
     model: str
     text: str

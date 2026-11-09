@@ -79,6 +79,10 @@ Plan creation is offline and scans every ingested text file as a primary, includ
 
 The scanner validates JSON and evidence spans, keeps raw responses and rejected findings, and collapses exact duplicates only. Source-consistent findings still require security review. Empty model output, failed requests and truncated responses are not counted as clean scans. The command exits with code 1 for incomplete scans, and 2 for configuration/preflight failures.
 
+## Student experiments
+
+Run a baseline, append the saved teacher checklist, or load a trained LoRA adapter on the same frozen plan. See the [student distillation guide](docs/distillation.md) for dataset review, local training, and paired scans.
+
 ## Next milestones
 
 1. Configure a teacher model/API key and execute the full plan; review real findings and noise.

@@ -6,14 +6,14 @@ import re
 import time
 from pathlib import Path
 
-from cloud_luna_lessons import LessonSet
 from cyber_scan.config import ModelConfig, load_config
 from cyber_scan.ingest.pipeline import digest, token_counter, write_json
 from cyber_scan.models import create_client
 from cyber_scan.models.openai_compatible import ModelError, chat_payload
 from cyber_scan.scan.plan import load_plan, primary_files
-from cyber_scan.scan.prompts import SYSTEM_PROMPT, messages_for
+from cyber_scan.scan.prompts import SYSTEM_PROMPT, lesson_appendix, messages_for
 from cyber_scan.scan.runner import ScanResponse, atomic_json, run_scan
+from cyber_scan.schemas import LessonSet
 
 SUCCESS = {'completed', 'completed_with_rejections'}
 BASELINE_PLAN = '209b803ce99263c9d028860aa7cf4aabedc00aa8135af1ea0a3e65f6239c4eff'
@@ -38,8 +38,7 @@ def preflight(config, plan_path, baseline_path, lessons_path, matched_path):
 
     raw_lessons = lessons_path.read_bytes()
     lessons = LessonSet.model_validate_json(raw_lessons).lessons
-    appendix = ('Apply these teacher-derived review criteria when supported by the supplied source.\n'
-                + '\n'.join(f'- {item.pattern}. {item.reporting_threshold}' for item in lessons))
+    appendix = lesson_appendix(lessons)
     count = token_counter(plan['tokenizer'])
     reservations, selected, excluded = [], [], []
     for unit in units:

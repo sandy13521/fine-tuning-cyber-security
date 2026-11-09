@@ -73,6 +73,10 @@ def retry_delay(response, attempt):
     return min(max([0, *hints] if hints else [fallback]), 300)
 
 
+def schema_message(schema):
+    return {"role": "system", "content": "Return only valid JSON matching this schema: " + json.dumps(schema)}
+
+
 def chat_payload(config, messages, response_schema):
     messages = [dict(message) for message in messages]
     payload = {"model": config.model, "messages": messages,
@@ -87,7 +91,7 @@ def chat_payload(config, messages, response_schema):
         payload["service_tier"] = config.service_tier
     if response_schema:
         if config.response_format != "json_schema" or config.schema_in_prompt:
-            messages.append({"role": "system", "content": "Return only valid JSON matching this schema: " + json.dumps(response_schema)})
+            messages.append(schema_message(response_schema))
         if config.response_format == "json_schema":
             payload["response_format"] = {"type": "json_schema", "json_schema": {"name": "result", "schema": strict_json_schema(response_schema), "strict": True}}
         elif config.response_format == "json_object":

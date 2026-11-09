@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from cyber_scan.config import AppConfig, ModelConfig
+from cyber_scan.distill import load_distill_dataset, prepare_distill
 from cyber_scan.ingest.pipeline import ingest
 from cyber_scan.scan.plan import build_plan, group_plan, load_plan, segment, windows, render_segment
 from cyber_scan.scan.runner import run_scan, review_response
@@ -170,3 +171,34 @@ class ScanTests(unittest.TestCase):
         reviewed = review_response(response([valid, invalid]), unit)
         self.assertEqual(len(reviewed['accepted']), 1)
         self.assertEqual(len(reviewed['rejected']), 1)
+
+    def test_distill_excludes_unreviewed_negatives_and_rejected_findings(self):
+        self.build()
+        _, units = load_plan(self.plan)
+        results = [response([finding(), finding(snippet='made_up();')])
+                   if unit['primary'] == 'Main.java' else response() for unit in units]
+        run_scan(self.config, self.plan, self.output, client=FakeClient(results))
+        dataset = self.root / 'dataset'
+        manifest = prepare_distill(self.plan, self.output, dataset, allow_unreviewed=True)
+        self.assertEqual((manifest['examples'], manifest['findings'], manifest['negative_examples']), (1, 1, 0))
+        with self.assertRaisesRegex(ValueError, 'Provisional'):
+            load_distill_dataset(dataset)
+        _, rows = load_distill_dataset(dataset, allow_unreviewed=True)
+        self.assertEqual(rows[0]['completion']['findings'], [finding()])
+
+        review = self.root / 'review.json'
+        review.write_text(json.dumps({u['id']: [0] if u['primary'] == 'Main.java' else [] for u in units}))
+        reviewed = self.root / 'reviewed'
+        self.assertEqual(prepare_distill(self.plan, self.output, reviewed, review)['negative_examples'], 1)
+        with (reviewed / 'examples.jsonl').open('a') as examples:
+            examples.write(' ')
+        with self.assertRaisesRegex(ValueError, 'integrity'):
+            load_distill_dataset(reviewed)
+
+    def test_resume_refuses_a_changed_local_adapter(self):
+        self.build()
+        run_scan(self.config, self.plan, self.output, max_requests=1, client=FakeClient([response()]),
+                 model_identity={'adapter_sha256': 'first'})
+        with self.assertRaisesRegex(ValueError, 'different inputs'):
+            run_scan(self.config, self.plan, self.output, resume=True, client=FakeClient([]),
+                     model_identity={'adapter_sha256': 'second'})

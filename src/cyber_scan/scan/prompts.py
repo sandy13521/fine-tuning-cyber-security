@@ -28,3 +28,8 @@ def messages_for(unit):
              json.dumps({'primary': unit['primary'], 'kind': unit['kind'],
                          'omitted_related_files': unit['omitted_related_files'],
                          'source': unit['content']}, ensure_ascii=False)}]
+
+
+def lesson_appendix(lessons):
+    return ('Apply these teacher-derived review criteria when supported by the supplied source.\n'
+            + '\n'.join(f'- {item.pattern}. {item.reporting_threshold}' for item in lessons))

@@ -3,15 +3,15 @@ import json
 import time
 from pathlib import Path
 
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 
-from cyber_scan.config import StrictModel, load_config
+from cyber_scan.config import load_config
 from cyber_scan.models import create_client
 from cyber_scan.models.openai_compatible import ModelError, chat_payload
 from cyber_scan.scan.plan import load_plan
 from cyber_scan.scan.prompts import messages_for
 from cyber_scan.scan.runner import ScanResponse, atomic_json, run_scan
-from cyber_scan.schemas import Lesson
+from cyber_scan.schemas import LessonSet
 
 PLAN = Path('runs/qwen-plan/full-plan')
 OUTPUT = Path('runs/luna-teacher')
@@ -29,10 +29,6 @@ Cover distinct transferable patterns. Merge duplicate observations and skip unsu
 Keep each lesson concise. Omit app names, class names specific to the app, paths, line numbers, identifiers
 specific to this APK, secrets, and benchmark answers. Refer to platform APIs by their general names.
 Return at most 16 lessons that can be used on other apps."""
-
-
-class LessonSet(StrictModel):
-    lessons: list[Lesson] = Field(min_length=1, max_length=16)
 
 
 def lesson_messages(entries):

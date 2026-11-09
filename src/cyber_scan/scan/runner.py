@@ -139,7 +139,7 @@ def summarize(plan, units, output):
 
 
 def run_scan(config, plan_path, output, role='teacher', resume=False, retry_failed=False,
-             max_requests=None, delay_seconds=0, client=None, progress=None, *, system_appendix=''):
+             max_requests=None, delay_seconds=0, client=None, progress=None, *, system_appendix='', model_identity=None):
     plan, units = load_plan(plan_path)
     model = config.models.get(role)
     if model is None:
@@ -162,6 +162,8 @@ def run_scan(config, plan_path, output, role='teacher', resume=False, retry_fail
                 'model': model_settings, 'prompt': SYSTEM_PROMPT, 'response_schema': schema}
     if system_appendix:
         identity['system_appendix'] = system_appendix
+    if model_identity is not None:
+        identity['local_model'] = model_identity
     if output.exists():
         if not resume:
             raise ValueError('Scan output exists; use --resume or choose a new directory')

@@ -11,6 +11,8 @@ dependencies = ["pydantic>=2.7,<3", "PyYAML>=6,<7", "httpx[socks]>=0.27,<1"]
 
 [project.optional-dependencies]
 tokens = ["tiktoken>=0.7,<1"]
+distill = ["torch>=2.5,<3", "transformers>=4.57.1,<5", "peft>=0.17.1,<0.19", "accelerate>=1,<2"]
+qlora = ["cyber-scan[distill]", "bitsandbytes>=0.45,<1"]
 
 [project.scripts]
 cyber-scan = "cyber_scan.cli:main"
