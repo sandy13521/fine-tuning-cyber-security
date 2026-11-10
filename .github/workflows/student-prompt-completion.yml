@@ -1,4 +1,4 @@
-name: Continue lesson-assisted GPT-OSS 20B after quota wait
+name: Resume lesson-assisted GPT-OSS 20B
 
 on:
   push:
@@ -47,13 +47,8 @@ jobs:
         with:
           name: student-lesson-assisted
           path: runs
-          run-id: 42685198301
+          run-id: 42685840613
           github-token: ${{ github.token }}
-      - name: Wait until Groq's reported retry window
-        run: |
-          retry_at=$(date -u -d '2026-11-09T19:50:09Z' +%s)
-          remaining=$((retry_at - $(date -u +%s)))
-          if [ "$remaining" -gt 0 ]; then sleep "$remaining"; fi
       - name: Scan unattempted bundles with the same lesson prompt
         env:
           STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
