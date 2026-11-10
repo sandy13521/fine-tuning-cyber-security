@@ -1,4 +1,4 @@
-name: Resume lesson-assisted GPT-OSS 20B
+name: Finish the remaining lesson-assisted GPT-OSS 20B bundles
 
 on:
   push:
@@ -47,9 +47,9 @@ jobs:
         with:
           name: student-lesson-assisted
           path: runs
-          run-id: 42685840613
+          run-id: 42767291034
           github-token: ${{ github.token }}
-      - name: Scan unattempted bundles with the same lesson prompt
+      - name: Retry and scan the nine remaining bundles with the same lesson prompt
         env:
           STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
           PYTHONPATH: scripts
@@ -75,12 +75,12 @@ jobs:
 
           appendix, comparison = preflight(config, PLAN, BASELINE, LESSONS, MATCHED_PLAN)
           checkpoint = json.loads((OUTPUT / 'summary.json').read_text())
-          if (checkpoint['completed_units'], checkpoint['planned_units']) != (5, 27):
+          if (checkpoint['completed_units'], checkpoint['planned_units']) != (18, 27):
               raise ValueError('Unexpected progress in the source checkpoint')
 
           client = StudentQuotaClient(create_client(model))
           report = run_scan(config, MATCHED_PLAN, OUTPUT, role='student', resume=True,
-                            max_requests=19, delay_seconds=60,
+                            retry_failed=True, max_requests=9, delay_seconds=60,
                             system_appendix=appendix, client=client,
                             progress=lambda event: print(json.dumps(event), flush=True))
           atomic_json(OUTPUT / 'comparison.json', comparison)
