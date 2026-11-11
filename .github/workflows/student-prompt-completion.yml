@@ -47,9 +47,9 @@ jobs:
         with:
           name: student-lesson-assisted
           path: runs
-          run-id: 42775582382
+          run-id: 42793314350
           github-token: ${{ github.token }}
-      - name: Retry and scan the eight remaining bundles with the same lesson prompt
+      - name: Retry and scan the seven remaining bundles with the same lesson prompt
         env:
           STUDENT_API_KEY: ${{ secrets.STUDENT_API_KEY || secrets.GROQ_API_KEY }}
           PYTHONPATH: scripts
@@ -75,12 +75,12 @@ jobs:
 
           appendix, comparison = preflight(config, PLAN, BASELINE, LESSONS, MATCHED_PLAN)
           checkpoint = json.loads((OUTPUT / 'summary.json').read_text())
-          if (checkpoint['completed_units'], checkpoint['planned_units']) != (19, 27):
+          if (checkpoint['completed_units'], checkpoint['planned_units']) != (20, 27):
               raise ValueError('Unexpected progress in the source checkpoint')
 
           client = StudentQuotaClient(create_client(model))
           report = run_scan(config, MATCHED_PLAN, OUTPUT, role='student', resume=True,
-                            retry_failed=True, max_requests=8, delay_seconds=60,
+                            retry_failed=True, max_requests=7, delay_seconds=60,
                             system_appendix=appendix, client=client,
                             progress=lambda event: print(json.dumps(event), flush=True))
           atomic_json(OUTPUT / 'comparison.json', comparison)
